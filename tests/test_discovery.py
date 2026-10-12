@@ -16,7 +16,7 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(config['state_topic'], 'watermeter/12345678/state')
             self.assertEqual(config['availability_topic'], 'watermeter/12345678/availability')
             self.assertTrue(config['name'].endswith(' 12345678'))
-            self.assertTrue(config['default_entity_id'].endswith('_12345678'))
+            self.assertEqual(config['default_entity_id'], 'sensor.' + config['unique_id'])
             self.assertNotIn('expire_after', config)
             self.assertIn('.get(', config['value_template'])
             self.assertNotIn('float(0)', config['value_template'])
@@ -46,6 +46,6 @@ class DiscoveryTests(unittest.TestCase):
     def test_meter_suffix_preserves_leading_zeros_and_existing_identity(self):
         configs = [json.loads(payload) for _, payload in messages(replace(Settings(), meter_id='00123456'))]
         self.assertEqual(configs[0]['name'], 'Total water 00123456')
-        self.assertEqual(configs[0]['default_entity_id'], 'sensor.diehl_hydrus_total_m3_00123456')
+        self.assertEqual(configs[0]['default_entity_id'], 'sensor.diehl_hydrus_00123456_total_m3')
         self.assertEqual(configs[0]['unique_id'], 'diehl_hydrus_00123456_total_m3')
         self.assertTrue(all(c['name'].endswith(' 00123456') for c in configs))

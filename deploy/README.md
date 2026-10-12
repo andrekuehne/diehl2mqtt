@@ -39,7 +39,7 @@ For anonymous MQTT, omit `compose.mqtt.auth.yaml` and the password setup. For JS
 
 The default broker connection uses no TLS. For TLS configuration, USB permissions, Proxmox passthrough, health, cleanup and troubleshooting, see the full [project README](https://github.com/andrekuehne/diehl2mqtt#readme). The receiver needs exclusive access to the dongle. Run only one instance for this meter/MQTT client identity.
 
-MQTT publishes the complete decoded telegram as retained JSON. Home Assistant discovers ten sensors for current/stored readings, dates and diagnostics; every name ends with your meter ID. Status exposes the complete JSON as attributes. Optional values remain unknown when absent. Existing entity identities are preserved; Home Assistant only applies the new entity ID suffix automatically when first registering an entity.
+MQTT publishes the complete decoded telegram as retained JSON. Home Assistant discovers ten sensors for current/stored readings, dates and diagnostics; every name ends with your meter ID. New entity IDs place it immediately after `diehl_hydrus`, for example `sensor.diehl_hydrus_12345678_total_m3`. Status exposes the complete JSON as attributes. Optional values remain unknown when absent. Existing entity identities are preserved; Home Assistant only applies default entity IDs when first registering an entity.
 
 In Home Assistant, find the Water device under MQTT. Total water uses `m³`, `water` and `total_increasing`. If your Recorder has an include whitelist, include this sensor before adding it under Energy → Water consumption. Check States and Statistics if it does not appear.
 

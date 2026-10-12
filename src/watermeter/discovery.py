@@ -25,7 +25,7 @@ def messages(settings):
     for field, name, extra in SENSORS:
         unique_id = f"{device_id}_{field}"
         payload = {"name": f"{name} {settings.meter_id}", "unique_id": unique_id,
-                   "default_entity_id": f"sensor.diehl_hydrus_{field}_{settings.meter_id}",
+                   "default_entity_id": f"sensor.{unique_id}",
                    "state_topic": settings.state_topic,
                    "value_template": "{{ value_json.get('" + field + "') }}",
                    "availability_topic": settings.availability_topic,

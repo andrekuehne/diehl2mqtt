@@ -23,7 +23,7 @@ import time
 import urllib.request
 import uuid
 
-DEFAULT_RELEASE = "v0.3.0"
+DEFAULT_RELEASE = "v0.3.1"
 REPOSITORY = "https://github.com/andrekuehne/diehl2mqtt"
 PVE_CONFIG = Path("/etc/pve/lxc")
 CONFIG_DIR = Path("/etc/diehl2mqtt-lxc")

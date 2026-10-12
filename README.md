@@ -8,16 +8,16 @@ For **Proxmox VE 9.1+ without nested Docker**, use the interactive [direct LXC i
 
 For another Linux **amd64** host, install [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin and connect or pass through the RTL-SDR. arm64 is deferred. The deployment archive contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts.
 
-Download and unpack the release (this example installs `v0.3.0`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
+Download and unpack the release (this example installs `v0.3.1`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.3.0/diehl2mqtt-v0.3.0-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.3.0/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.3.1/diehl2mqtt-v0.3.1-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.3.1/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.3.0-deploy.tar.gz
-cd diehl2mqtt-v0.3.0
+tar -xzf diehl2mqtt-v0.3.1-deploy.tar.gz
+cd diehl2mqtt-v0.3.1
 cp .env.example .env
 ```
 
@@ -270,7 +270,7 @@ The shared device is Diehl Metering / HYDRUS 2.0 / DME173 with identifier `diehl
 | Decoder timestamp (diagnostic) | `_timestamp` | — | timestamp | — |
 | Last received (diagnostic) | `_received_at` | — | timestamp | — |
 
-Every sensor name ends with the configured meter ID, for example `Total water 12345678`. Newly discovered entities use IDs such as `sensor.diehl_hydrus_total_m3_12345678`; leading zeros are preserved. Existing unique IDs and discovery topics are unchanged, so upgrades update the same entities. Home Assistant preserves an existing entity ID or user-customized name: if an older entity also needs the suffix in its ID, rename it in its entity settings without deleting it. The [MQTT sensor reference](https://www.home-assistant.io/integrations/sensor.mqtt/#default_entity_id) explains that the default entity ID is applied on first registration only.
+Every sensor name ends with the configured meter ID, for example `Total water 12345678`. Newly discovered entities place the meter ID immediately after `diehl_hydrus`, for example `sensor.diehl_hydrus_12345678_total_m3`; leading zeros are preserved. Existing unique IDs and discovery topics are unchanged, so upgrades update the same entities. Home Assistant preserves an existing entity ID or user-customized name: rename an older entity in its entity settings without deleting it if you want the new ID format. The [MQTT sensor reference](https://www.home-assistant.io/integrations/sensor.mqtt/#default_entity_id) explains that the default entity ID is applied on first registration only.
 
 The retained state JSON contains **every field emitted by the pinned decoder**, including meter metadata, original timestamps and additional future fields, plus gateway `driver` and `received_at`. Status also exposes this complete JSON as Home Assistant attributes. No raw RF/hex dump or invented fields are added. Decoder fields that are absent from a telegram remain absent in JSON and unknown in their sensors. Some meter telegram variants do not carry every optional value.
 
@@ -362,8 +362,8 @@ Successful main pushes and scheduled builds automatically publish `latest` to GH
 To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
 Use a new version for subsequent releases. CI rejects malformed version tags and commits outside main's history. After passing the same tests, it publishes the version tag and creates a GitHub release with a build-free deployment archive pinned to the actual registry digest, pinned unmodified native source archives plus project build materials/runtime package versions, an image reference and `SHA256SUMS`. A version release does not move `latest`; that follows main. The package must be public in GitHub's package settings for anonymous pulls (package visibility is separate from repository visibility). Hosted results are recorded in [verification](docs/verification.md). arm64 is not claimed supported/tested.
