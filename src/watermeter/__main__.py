@@ -31,7 +31,7 @@ def main():
     except ConfigError as exc:
         print(str(exc), file=sys.stderr, flush=True)
         return 2
-    except (OSError, ValueError, RuntimeError):
+    except Exception:
         print("Reader failed safely; check runtime files and installed binaries", file=sys.stderr, flush=True)
         return 1
 

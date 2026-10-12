@@ -9,3 +9,10 @@ __pycache__/
 .runtime/
 test-output/
 *.egg-info/
+
+compose.*.local.yaml
+readings.jsonl
+.aws/
+.codex/
+.agents/
+.ssh/

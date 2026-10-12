@@ -1,5 +1,6 @@
 """Bounded latest-state publisher; only the worker performs network I/O."""
 import ssl
+import socket
 import threading
 import time
 import paho.mqtt.client as mqtt
@@ -35,7 +36,7 @@ class Publisher:
             try:
                 self._tls = ssl.create_default_context(cafile=settings.ca or None)
                 if settings.cert:
-                    self._tls.load_cert_chain(settings.cert, settings.client_key)
+                    self._tls.load_cert_chain(settings.cert, settings.client_key, password=lambda: "")
             except (OSError, ValueError, ssl.SSLError):
                 raise ConfigError("Cannot load MQTT TLS trust or client certificate files") from None
         self._stop = threading.Event()
@@ -160,8 +161,14 @@ class Publisher:
                 log("MQTT connection/TLS failure; reception continues during retry")
             finally:
                 try:
-                    if self._stop.is_set() and self.connected:
-                        self._publish(client, self.settings.availability_topic, "offline", shutdown=True)
+                    if client.is_connected():
+                        offline_sent = self.connected and self._publish(
+                            client, self.settings.availability_topic, "offline", shutdown=True)
+                        if not offline_sent and client.socket():
+                            # Do not suppress the broker will with DISCONNECT if offline
+                            # could not be acknowledged on this still-open session.
+                            client.socket().shutdown(socket.SHUT_RDWR)
+                            client.socket().close()
                     client.disconnect()
                     client.loop(timeout=0.1)
                 except Exception:

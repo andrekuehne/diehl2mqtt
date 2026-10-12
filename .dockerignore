@@ -11,3 +11,6 @@ secrets
 .venv
 .runtime
 test-output
+
+compose.*.local.yaml
+readings.jsonl

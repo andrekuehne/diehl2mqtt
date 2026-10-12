@@ -36,3 +36,23 @@ All recorded times above are UTC; Berlin is UTC+02:00 on this date. First live o
 | WP09 workflow/update validation | PASS | Official action refs resolved to immutable SHA pins. actionlint 1.7.12 validates build.yml locally. Read-only update checker runs against public upstreams/PyPI/base manifest. PRs have read-only permissions/no publish/no runtime AES. Optional AES is only on trusted main non-PR runtime execution; no pull_request_target. Publication is explicit manual/main-only with isolated packages:write job. Weekly job pulls pinned base and disables build cache, and Dependabot proposes reviewed base/Action updates. |
 | WP09 hosted CI/GHCR | NOT RUN | No remote is configured; no hosted workflow or registry publication claimed. Local hardware-free image checks run the same test command. |
 | arm64 | NOT RUN | Initial supported/tested target is amd64 only. |
+
+## Final acceptance review (WP10)
+
+- PASS: final linux/amd64 production image `sha256:282e59ab5ff4330e5b125c1a2aeed42f571aa589663c2abd7704e9133fbf8b72` builds and passes executable/library/driver smoke checks. Base identity is `debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587`.
+- PASS: versions inside final image: wmbusmeters 3.0.0 at `ac4f295369a48ef51cb835e6920b62cbee743bd6`, rtl-wmbus 1.1.0 at `34684e655df70867ac86e799561ec6512c45be0a`, Paho MQTT 2.1.0. Runtime distro package versions are stored in `/usr/share/watermeter/packages.txt`.
+- PASS: final test image executes 22 unittest methods in 15.792 seconds, with many additional configuration/lifecycle subcases. Real broker scenarios include mutual TLS requiring a client certificate, rejecting missing certificates, custom discovery/birth/topics/name/ID, optional unknown fields and cached receipt-time preservation.
+- PASS: correct-key image fixture plus wrong-key/ID/driver/corrupted-ciphertext checks rerun successfully. Fixture measurement remains historical and independent of live values.
+- PASS: all three Compose combinations validate, shell scripts parse, Python compiles, actionlint validates CI, and read-only upstream/client/base update inspection executes.
+- PASS: final image recreated through authenticated Compose at 10:27:42 UTC; its own separate observer receives a new physical reading at 10:27:51.896 UTC, ID 12345678, dme173, finite total_m3=3.246, three configs and online availability. Reader remains running for handoff; all disposable test containers/brokers exited/cleaned up.
+- PASS: supplied AES value absent from tracked/unignored files, Git history, selected build/test/runtime logs, image metadata/history and saved image layers. Runtime process arguments contain no AES value; all three child environments omit AES/password settings. Host secret directory/file modes are 0700/0600. Secrets and local broker settings are ignored by Git and Docker context.
+- LIMITATION: the owner's MQTT password text matches pre-existing wording in the original requirements baseline, so an unrestricted substring scan is non-diagnostic for that value. No credential was inserted into that baseline. The audit reports this explicitly; runtime file-only loading, child environment removal, structured connection configuration, sanitized errors and synthetic random-password broker tests verify the handling without disclosing the password.
+- PASS: README contains complete file tree, exact image/offline/SDR/live/Compose/MQTT/logs/health/stop/cleanup commands, secret procedures, TLS/ACL/discovery/removal, reviewed upgrades, CI/GHCR and Ubuntu/Proxmox troubleshooting. Original IMPLEMENTATION_PLAN.md is preserved unchanged.
+
+Remaining external checks:
+
+1. NOT RUN: owner-confirmed Home Assistant UI and Energy water-statistics selection, three entities/one device and restart stability. Actual retained discovery/config delivery is verified, but no HA UI access or confirmation has been received. README has exact manual steps.
+2. NOT RUN: hosted GitHub Actions/GHCR. There is no configured remote; local workflow validation and equivalent image tests pass. Add a remote and run trusted CI before claiming hosted results.
+3. NOT RUN: optional physical unplug/replug stress, nonroot/rootless Docker, arm64 and Proxmox VM/LXC passthrough. Mandatory Ubuntu physical C1/stop/restart/live production-MQTT acceptance is complete.
+
+Local operation: owner-provided AES/password files and nonsecret `.env.local` stay protected and ignored. The final authenticated reader is running; use the full `.env.local` plus three-file Compose command in README for logs, stop, restart or removal. No host module/udev/passthrough configuration was changed automatically. The owner installed Docker and granted Docker socket access during verification.

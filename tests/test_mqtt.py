@@ -121,8 +121,11 @@ class MQTTIntegrationTests(unittest.TestCase):
         self.subscribers.append(s)
         return s
 
-    def payload(self):
-        return encode(accept(Path("tests/fixtures/reading.json").read_text(), Settings()))
+    def payload(self, settings=None):
+        settings = settings or Settings()
+        reading = json.loads(Path("tests/fixtures/reading.json").read_text())
+        reading["id"] = settings.meter_id
+        return encode(accept(json.dumps(reading), settings))
 
     def test_retained_birth_duplicates_shutdown(self):
         self.broker.start()
@@ -179,10 +182,33 @@ class MQTTIntegrationTests(unittest.TestCase):
                                  client_id="distinct_test_client", discovery=False)
         p = self.publisher(settings)
         s = self.subscriber()
-        p.submit(self.payload())
+        p.submit(self.payload(settings))
         wait_for(lambda: s.records_for("custom/water/00123456/state"))
         self.assertFalse([r for r in s.records if r[0].endswith("/config")])
         self.assertEqual(p._client()._client_id, b"distinct_test_client")
+
+    def test_custom_discovery_birth_and_optional_unknowns(self):
+        self.broker.start()
+        settings = self.settings(meter_id="00123456", name="Basement", prefix="custom/water",
+                                 discovery_prefix="custom/ha", status_topic="custom/birth")
+        p = self.publisher(settings)
+        s = self.subscriber()
+        reading = json.loads(self.payload(settings))
+        reading.pop("flow_temperature_c")
+        reading["status"] = None
+        p.submit(encode(reading))
+        wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) == 3)
+        configs = [json.loads(r[1]) for r in s.records if r[0].endswith("/config")]
+        self.assertTrue(all(c["unique_id"].startswith("diehl_hydrus_00123456_") for c in configs))
+        self.assertTrue(all(c["device"]["name"] == "Basement" for c in configs))
+        wait_for(lambda: s.records_for(settings.state_topic))
+        result = json.loads(s.records_for(settings.state_topic)[-1][1])
+        self.assertNotIn("flow_temperature_c", result)
+        self.assertIsNone(result["status"])
+        s.client.publish("custom/birth", "online", qos=1).wait_for_publish(3)
+        wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) >= 6)
+        wait_for(lambda: len(s.records_for(settings.state_topic)) >= 2)
+        self.assertEqual(json.loads(s.records_for(settings.state_topic)[-1][1]), reading)
 
     def test_last_will_after_process_death(self):
         self.broker.start()
@@ -246,6 +272,27 @@ class MQTTIntegrationTests(unittest.TestCase):
             self.assertFalse(p.connected)
             p.close()
         valid = self.publisher(replace(self.settings(tls=True, ca=ca), host="localhost"))
+        valid.submit(self.payload())
+        wait_for(lambda: valid.acknowledged >= 5)
+        self.assertTrue(valid.connected)
+
+    def test_mutual_tls_requires_client_certificate(self):
+        ca = self.tls_files()
+        key, csr, cert = (self.root / n for n in ("client.key", "client.csr", "client.pem"))
+        def openssl(*args):
+            subprocess.run(["openssl", *args], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        openssl("req", "-newkey", "rsa:2048", "-nodes", "-keyout", str(key), "-out", str(csr), "-subj", "/CN=watermeter-test")
+        ext = self.root / "client.ext"
+        ext.write_text("basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth\n")
+        openssl("x509", "-req", "-in", str(csr), "-CA", ca, "-CAkey", str(self.root / "ca.key"), "-CAcreateserial",
+                "-out", str(cert), "-days", "1", "-extfile", str(ext))
+        self.broker.path.write_text(self.broker.path.read_text() + "require_certificate true\n")
+        self.broker.start()
+        missing = self.publisher(replace(self.settings(tls=True, ca=ca), host="localhost"))
+        time.sleep(0.8)
+        self.assertEqual(missing.acknowledged, 0)
+        missing.close()
+        valid = self.publisher(replace(self.settings(tls=True, ca=ca, cert=str(cert), client_key=str(key)), host="localhost"))
         valid.submit(self.payload())
         wait_for(lambda: valid.acknowledged >= 5)
         self.assertTrue(valid.connected)
