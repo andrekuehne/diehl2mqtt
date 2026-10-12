@@ -1,0 +1,32 @@
+services:
+  watermeter:
+    image: ${WATERMETER_IMAGE:-watermeter:local}
+    build:
+      context: .
+      target: final
+    restart: unless-stopped
+    stop_grace_period: 20s
+    environment:
+      METER_AES_KEY_FILE: /run/secrets/meter_aes_key
+      METER_ID: "${METER_ID:-12345678}"
+      METER_DRIVER: "${METER_DRIVER:-dme173}"
+      METER_NAME: "${METER_NAME:-Water}"
+      WMBUS_FREQUENCY: "${WMBUS_FREQUENCY:-868.95M}"
+      WMBUS_MODE: "${WMBUS_MODE:-c1}"
+      MQTT_ENABLED: "false"
+    secrets:
+      - meter_aes_key
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+    device_cgroup_rules:
+      - 'c 189:* rmw'
+    tmpfs:
+      - /run/watermeter:mode=0700
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+secrets:
+  meter_aes_key:
+    file: ./secrets/meter_aes_key

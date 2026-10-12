@@ -1,0 +1,13 @@
+services:
+  watermeter:
+    environment:
+      MQTT_ENABLED: "true"
+      MQTT_HOST: "${MQTT_HOST:?Set MQTT_HOST to a container-reachable broker}"
+      MQTT_PORT: "${MQTT_PORT:-1883}"
+      MQTT_USERNAME: "${MQTT_USERNAME:-}"
+      MQTT_TLS: "${MQTT_TLS:-false}"
+      MQTT_TOPIC_PREFIX: "${MQTT_TOPIC_PREFIX:-watermeter}"
+      MQTT_CLIENT_ID: "${MQTT_CLIENT_ID:-watermeter_${METER_ID:-12345678}}"
+      HA_DISCOVERY_ENABLED: "${HA_DISCOVERY_ENABLED:-true}"
+      HA_DISCOVERY_PREFIX: "${HA_DISCOVERY_PREFIX:-homeassistant}"
+      HA_STATUS_TOPIC: "${HA_STATUS_TOPIC:-homeassistant/status}"

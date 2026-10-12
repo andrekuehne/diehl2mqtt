@@ -1,0 +1,9 @@
+services:
+  watermeter:
+    environment:
+      MQTT_PASSWORD_FILE: /run/secrets/mqtt_password
+    secrets:
+      - mqtt_password
+secrets:
+  mqtt_password:
+    file: ./secrets/mqtt_password
