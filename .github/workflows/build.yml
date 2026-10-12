@@ -59,8 +59,29 @@ jobs:
           no-cache: ${{ github.event_name == 'schedule' }}
           cache-from: type=gha,scope=tests
           cache-to: type=gha,scope=tests,mode=max
+      - name: Build Home Assistant add-on image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: ha-addon
+          platforms: linux/amd64
+          load: true
+          tags: watermeter:ha-addon
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=production
+          cache-to: type=gha,scope=addon,mode=max
       - name: Run settings, security, lifecycle, offline-negative and real broker tests
         run: docker run --rm --network none --tmpfs /run/watermeter:mode=0700 watermeter:test
+      - name: Verify installed native LXC application layout
+        run: |
+          docker run --rm --network none --entrypoint /usr/bin/python3 --mount type=bind,src="$PWD/scripts/install-proxmox.py",dst=/tmp/install-proxmox.py,readonly --mount type=bind,src="$PWD/scripts/test-lxc-layout.py",dst=/tmp/test-lxc-layout.py,readonly watermeter:local /tmp/test-lxc-layout.py
+      - name: Verify Home Assistant manifest and actual add-on startup/recovery
+        run: |
+          python3 -m pip install PyYAML
+          python3 scripts/check-addon.py
+          docker run --rm --network none --tmpfs /tmp --entrypoint python --mount type=bind,src="$PWD/scripts/test-ha-addon.py",dst=/test-ha-addon.py,readonly watermeter:ha-addon /test-ha-addon.py
       - name: Verify OCI archive conversion for direct Proxmox LXC
         run: |
           sudo apt-get update -qq
@@ -74,12 +95,16 @@ jobs:
           MQTT_HOST=broker.invalid METER_ID=12345678 docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml config --quiet
       - name: Save the tested production image
         if: github.event_name != 'pull_request'
-        run: docker save watermeter:local -o "$RUNNER_TEMP/watermeter-image.tar"
+        run: |
+          docker save watermeter:local -o "$RUNNER_TEMP/watermeter-image.tar"
+          docker save watermeter:ha-addon -o "$RUNNER_TEMP/watermeter-addon-image.tar"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: github.event_name != 'pull_request'
         with:
           name: tested-amd64-image
-          path: ${{ runner.temp }}/watermeter-image.tar
+          path: |
+            ${{ runner.temp }}/watermeter-image.tar
+            ${{ runner.temp }}/watermeter-addon-image.tar
           retention-days: 2
       - name: Decode public synthetic fixture
         run: ./scripts/test-offline.sh
@@ -100,7 +125,9 @@ jobs:
           name: tested-amd64-image
           path: ${{ runner.temp }}
       - name: Load the tested production image
-        run: docker load -i "$RUNNER_TEMP/watermeter-image.tar"
+        run: |
+          docker load -i "$RUNNER_TEMP/watermeter-image.tar"
+          docker load -i "$RUNNER_TEMP/watermeter-addon-image.tar"
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -126,13 +153,33 @@ jobs:
           [[ "$digest" == "$image@sha256:"* ]]
           echo "reference=$digest" >> "$GITHUB_OUTPUT"
           echo "Published amd64 image: \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish exact tested Home Assistant image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          image="ghcr.io/${REPOSITORY,,}"
+          tag="ha-sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker tag watermeter:ha-addon "$image:$tag"
+          docker push "$image:$tag"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            # The add-on uses plain semver; standalone Docker uses v-prefixed tags.
+            tag="${GITHUB_REF_NAME#v}"
+            expected=$(docker image inspect watermeter:ha-addon --format '{{index .Config.Labels "io.hass.version"}}')
+            [[ "$tag" == "$expected" ]]
+            docker tag watermeter:ha-addon "$image:$tag"
+            docker push "$image:$tag"
+          else
+            docker tag watermeter:ha-addon "$image:ha-latest"
+            docker push "$image:ha-latest"
+          fi
       - name: Package versioned deployment and native sources
         if: startsWith(github.ref, 'refs/tags/')
         env:
           IMAGE: ${{ steps.image.outputs.reference }}
         run: |
           docker run --rm --network none --entrypoint cat watermeter:local /usr/share/watermeter/packages.txt > "$RUNNER_TEMP/packages.txt"
-          python3 scripts/package-release.py --version "$GITHUB_REF_NAME" --image "$IMAGE" --packages-file "$RUNNER_TEMP/packages.txt" --output "$RUNNER_TEMP/release"
+          docker run --rm --network none --entrypoint /usr/bin/python3 --mount type=bind,src="$PWD/scripts/package-app.py",dst=/tmp/package-app.py,readonly watermeter:local /tmp/package-app.py --version "$GITHUB_REF_NAME" --image "$IMAGE" > "$RUNNER_TEMP/app.tar.gz"
+          python3 scripts/package-release.py --version "$GITHUB_REF_NAME" --image "$IMAGE" --packages-file "$RUNNER_TEMP/packages.txt" --app-bundle "$RUNNER_TEMP/app.tar.gz" --output "$RUNNER_TEMP/release"
           tar -xzf "$RUNNER_TEMP/release/diehl2mqtt-$GITHUB_REF_NAME-deploy.tar.gz" -C "$RUNNER_TEMP"
           cd "$RUNNER_TEMP/diehl2mqtt-$GITHUB_REF_NAME"
           cp .env.example .env

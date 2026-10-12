@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--version", required=True)
     parser.add_argument("--image", required=True)
     parser.add_argument("--packages-file", required=True)
+    parser.add_argument("--app-bundle", required=True, type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", args.version):
@@ -56,7 +57,7 @@ def main():
         deploy.mkdir()
         for name in ("compose.yaml", "compose.mqtt.yaml", "compose.mqtt.auth.yaml",
                      ".env.example", "scripts/setup-secret.sh", "scripts/setup-mqtt-secret.sh",
-                     "scripts/install-proxmox.py"):
+                     "scripts/install-proxmox.py", "ct/diehl2mqtt.sh"):
             path = deploy / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(committed(name))
@@ -111,6 +112,9 @@ def main():
         archive(source, args.output / (source.name + ".tar.gz"))
     (args.output / "image.txt").write_text(args.image + "\n")
     names = ["diehl2mqtt-" + args.version + "-deploy.tar.gz", "diehl2mqtt-" + args.version + "-sources.tar.gz", "image.txt"]
+    app_name = "diehl2mqtt-" + args.version + "-app-amd64.tar.gz"
+    (args.output / app_name).write_bytes(args.app_bundle.read_bytes())
+    names.append(app_name)
     with (args.output / "SHA256SUMS").open("w") as checksums:
         for name in names:
             digest = hashlib.sha256((args.output / name).read_bytes()).hexdigest()

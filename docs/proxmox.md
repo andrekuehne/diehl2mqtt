@@ -1,32 +1,59 @@
 # Direct LXC installation on Proxmox VE 9.1+
 
-Run the interactive installer **as root on the Proxmox node with the SDR attached**. It uses Proxmox's OCI image importer to run the published diehl2mqtt image directly as an **unprivileged LXC**. No Docker daemon, nested Docker, compilation, or login to GHCR is needed. The app is PID 1 under `tini`, rather than a service inside a full Debian system container.
+Run the interactive installer **as root on the Proxmox node with the SDR attached**. It uses Proxmox's OCI image importer to run the published diehl2mqtt image directly as an **unprivileged LXC**. No Docker daemon, nested Docker, compilation, or login to GHCR is needed. A small recovery launcher runs the app under `tini`; this is an application container without in-guest systemd.
 
 Proxmox introduced OCI application containers in [VE 9.1](https://www.proxmox.com/en/about/company-details/press-releases/proxmox-virtual-environment-9-1) and currently classifies application-container support as a [technology preview](https://raw.githubusercontent.com/proxmox/pve-docs/master/pct.adoc). The installer has automated host-logic and OCI-conversion tests; actual boot, USB reception, reboot and reconnect tests must still be completed on a Proxmox node. It targets amd64 and a single Realtek `0bda:2832` or `0bda:2838` RTL-SDR on the node.
 
 ## Install
 
-In the node's shell, download the standalone script:
+In the **Proxmox node shell**, run:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)"
+```
+
+The one-line launcher downloads a release-pinned installer, verifies its built-in SHA256 checksum and preserves the terminal for interaction. Its temporary files are removed on exit. It uses the same dialog style as the Proxmox community scripts: Default/Advanced settings, blue terminal dialogs, storage/MQTT menus, hidden password boxes and colored status messages. This is this project's own installer; it does not depend on the community scripts framework.
+
+Default settings select the next unused CT ID, hostname `diehl2mqtt`, 1 CPU, 512 MiB RAM, 2 GiB disk and DHCP on `vmbr0`. Storage, SDR identity, meter ID and MQTT settings still require selection/entry. Advanced settings expose CT identity, RAM/disk and networking. The final summary requires confirmation before creation. Cancel/Esc exits setup; input cancellation before creation makes no host changes. Secret fields never have preset values.
+
+Pass options after Bash's command-name argument:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)" -- --memory 1024 --disk 8
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)" -- --plain
+```
+
+If `whiptail` or a suitable interactive terminal is unavailable, setup falls back to plain prompts. `--plain` explicitly selects that mode. No UI dependency is silently installed.
+
+For a downloadable standalone installer or a read-only preflight check:
 
 ```bash
 curl -fLo install-proxmox.py \
   https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/scripts/install-proxmox.py
 python3 install-proxmox.py --check
-python3 install-proxmox.py --release v0.3.1
+python3 install-proxmox.py --release v0.7.0
 ```
 
-`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.3.1 deployment archive also includes this standalone installer under `scripts/`. Version v0.3.1 includes full decoded-data discovery and meter-ID suffixes on sensor names, meter IDs immediately after `diehl_hydrus` in new entity IDs, and the Proxmox extraction permission fix.
+`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.7.0 deployment archive also includes this standalone installer under `scripts/`. Version v0.5.1 names the discovered device `Diehl Hydrus 2.0 ID <meter ID>` and omits the ID from sensor display names, while preserving entity IDs. Version v0.5.0 adds the one-line launcher and dialog setup, including the v0.4.1 clean guest-shell environment fix. Version v0.4.0 introduced native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
 
 The installer prompts for:
 
 - An unused, cluster-wide CT ID, hostname and active root-disk storage.
+- RAM in MiB (default **512**) and root disk in GiB (default **2**).
 - Linux bridge (default `vmbr0`), optional VLAN and DHCP or static IPv4 settings.
 - The connected SDR's USB port.
 - Your **eight-digit Wireless M-Bus meter ID**, preserving leading zeros. There is no default owner ID.
+- In Advanced/plain setup, fast demodulator math and algorithm selection (defaults: off / both).
 - MQTT mode: authenticated, anonymous, or off; broker address, port, TLS and username as applicable.
 - After showing the plan and confirming creation, the **32-character hexadecimal AES key** and, for authenticated MQTT, password, both with hidden input.
 
-The default allocation is 1 core, 512 MiB RAM and a 2 GiB root disk. The script refuses to overwrite an existing VM/CT or managed configuration. Failed installations leave any newly created CT for inspection; they never delete a guest. A failure before completion may require inspecting/removing that incomplete CT explicitly before retrying with the same ID.
+The default allocation is 1 core, 512 MiB RAM and a 2 GiB root disk. You can answer the allocation prompts or supply values directly:
+
+```bash
+python3 install-proxmox.py --release v0.7.0 --memory 1024 --disk 8
+```
+
+RAM accepts 256–65536 MiB and disk accepts 2–1024 GiB, subject to your node/storage capacity. A larger disk leaves more room for retained application releases. The script refuses to overwrite an existing VM/CT or managed configuration. Failed installations leave any newly created CT for inspection; they never delete a guest. A failure before completion may require inspecting/removing that incomplete CT explicitly before retrying with the same ID.
 
 The application image comes from the selected release's checksum-verified `image.txt`, pinned by registry digest. The host installs `skopeo` from its configured Debian repositories if needed, converts the public image to an OCI archive, and passes it to `pct create`. The temporary archive contains no keys and is removed after import. No existing guest is modified.
 
@@ -35,6 +62,32 @@ If an older installer failed while canonicalizing `/var/lib/lxc/CTID/rootfs` wit
 AES/MQTT secrets are written directly into `/etc/diehl2mqtt/secrets/` in the new guest: directory mode 0700, file mode 0600, owned by its mapped root UID/GID. They do not appear in command arguments, host-monitor configuration or image layers. Decoder-generated secret files live in a dedicated `/run/watermeter` tmpfs. CT backups **include the secret files** and must be protected accordingly.
 
 The installer enables Home Assistant discovery through the existing MQTT defaults. Publicly trusted TLS uses the image's system CA store. Custom CA/client certificates and mTLS are not interactive installer options; configure those separately if required. Prefer a broker IP or DNS name reachable from the guest; `.local` mDNS may not resolve there.
+
+## Demodulator tuning
+
+Version v0.7.0 adds runtime `WMBUS_FAST_MATH` (`false` / `true`) and `WMBUS_ALGORITHM` (`both` / `runlength` / `time2`). They require no compilation. Accurate math and both algorithms remain the defaults. Fast math reduces CPU with approximate atan; selecting one algorithm reduces reception diversity. Start with fast math and both algorithms, then compare reception gaps and fresh readings. See the [CPU measurements and limits](../README.md#reduce-sdr-cpu-use).
+
+New installations expose both settings in Advanced/plain setup. CLI values also apply to Default setup:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)" -- --fast-math true --algorithm both
+```
+
+For an **existing** installation, first run `update` inside the LXC and confirm v0.7.0 or newer with `update --status`. Then run the following as root on the **Proxmox node**, replacing every `CTID` with the actual number. This stops monitoring during the change and replaces only these two nonsecret settings:
+
+```bash
+systemctl disable --now diehl2mqtt-lxc@CTID.timer
+systemctl stop diehl2mqtt-lxc@CTID.service
+pct shutdown CTID
+sed -i '/^lxc\.environment\(\.runtime\)\?: WMBUS_\(FAST_MATH\|ALGORITHM\)=/d' /etc/pve/lxc/CTID.conf
+cat >> /etc/pve/lxc/CTID.conf <<'EOF'
+lxc.environment.runtime: WMBUS_FAST_MATH=true
+lxc.environment.runtime: WMBUS_ALGORITHM=both
+EOF
+systemctl enable --now diehl2mqtt-lxc@CTID.timer
+```
+
+The monitor starts the CT again. Check its console for `algorithm=both, fast_math=true` and confirm fresh readings. To restore defaults, repeat with `false` and `both`. Application updates preserve these CT environment settings. Editing a guest shell's environment alone does not configure its main receiver.
 
 ## USB access and automatic restart
 
@@ -90,6 +143,38 @@ Resume:
 systemctl enable --now diehl2mqtt-lxc@CTID.timer
 ```
 
-Updates are deliberate. For a new application release, first stop monitoring and shut down the old CT, then run the installer with a **new CT ID** and `--release vMAJOR.MINOR.PATCH`. Re-enter its runtime settings/secrets, verify reception/MQTT, and retain the old stopped CT for rollback. This initial installer does not replace an existing CT's rootfs or use `apt upgrade` to update the image's application binaries. Do not run two readers against the same dongle or MQTT client identity.
+### Update the application inside the LXC
+
+Installations created with v0.4.0 or newer have a root-only `update` command. From the **Proxmox host**, open a guest shell:
+
+```bash
+pct exec CTID -- /bin/bash
+```
+
+Then run **inside the guest**:
+
+```bash
+update --check                  # Compare with the latest stable GitHub release
+update                          # Confirm and install that release
+update --status                 # Show installed version and validation result
+update --release v0.4.1          # Select a specific published release
+update --rollback               # Return to the previous successfully installed release
+```
+
+For a guest created with the short-lived v0.4.0 installer, use `PYTHONPATH=/opt/watermeter update --release v0.4.1` for its first update. After `PYTHONPATH=/opt/watermeter update --status` reports `complete`, run `ln -sfn /opt/diehl2mqtt/current/bin/update /usr/local/bin/update` once inside that guest. This adopts the corrected, versioned wrapper. New v0.4.1 installations already have it.
+
+`--yes` skips the update confirmation for intentional automation. Updating requires outbound HTTPS/DNS access to GitHub and its release-asset service. No GitHub account, token, Docker daemon or Proxmox host credentials are required in the guest.
+
+The updater downloads the release's `app-amd64.tar.gz`, verifies its SHA256 checksum, rejects unsafe archive entries, and checks architecture, OS/Python compatibility and executable startup before switching. It updates the Python application/dependencies and compiled `wmbusmeters`/`rtl_wmbus` binaries. The CT ID, network, RAM/disk settings, meter ID and secret files stay in place. The application restarts inside the same CT; monitoring remains enabled.
+
+A recovery launcher kept outside the versioned application validates process health for up to 60 seconds, requiring five continuous healthy seconds. Startup failure or failed health validation restores the previous application automatically. `update --status` reports `pending`, `complete` or `rolled_back`. A successful process check does **not** prove RF reception, decryption or broker delivery: confirm a fresh meter reading and MQTT/Home Assistant state after updating. USB absence can delay validation until the host monitor restarts the CT.
+
+Application files live under `/opt/diehl2mqtt/releases`, selected by an atomic `current` symlink. Old releases are retained for rollback; staging requires at least 512 MiB free. If space runs low, increase the CT disk or remove only unused release directories after confirming they are neither `current` nor the `previous` release shown by `update --status`. Back up the CT before maintenance. The launcher and its bundle format are installation infrastructure; replacing that infrastructure requires a new CT.
+
+### OS refresh and older installations
+
+Application updates do **not** replace the guest root filesystem or update Debian packages such as Python, `rtl_sdr`, `tini`, libusb and CA certificates. For a full OS refresh, or a release requiring a different OS/Python ABI, install a fresh CT from the new release, verify it, and retain the old stopped CT for rollback. Debian package maintenance is separate; `apt upgrade` alone does not update diehl2mqtt's application bundle.
+
+LXCs created before v0.4.0 do not have the recovery launcher or `update` command. For the one-time transition, stop their host monitoring and shut down the old CT, then use the new installer with a **new CT ID** and re-enter settings/secrets. The installer never silently modifies an existing guest. Do not run two readers against the same dongle or MQTT client identity.
 
 To retire the installation, stop it using the maintenance commands, then delete the chosen CT through Proxmox after deciding whether its data/backups are still needed. Remove only its `/etc/diehl2mqtt-lxc/CTID.json` monitor configuration. Shared helper/unit files may serve other instances. USB-attached readers are tied to the node holding that hardware; automatic migration/HA is not configured by this installer.

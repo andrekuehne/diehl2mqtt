@@ -1,0 +1,60 @@
+name: Diehl Hydrus to MQTT
+version: "0.7.0"
+slug: diehl2mqtt
+description: Read a Diehl HYDRUS water meter with an RTL-SDR and publish all decoded data to MQTT.
+url: https://github.com/andrekuehne/diehl2mqtt
+arch:
+  - amd64
+image: ghcr.io/andrekuehne/diehl2mqtt
+startup: application
+boot: auto
+init: false
+usb: true
+tmpfs: true
+services:
+  - mqtt:want
+watchdog: http://[HOST]:8099/health
+timeout: 20
+stage: experimental
+options:
+  meter_id: null
+  aes_key: null
+  meter_name: Water
+  frequency: 868.95M
+  fast_math: false
+  algorithm: both
+  mqtt_auto: true
+  mqtt_host: ""
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+  mqtt_tls: false
+  mqtt_ca_certificate: ""
+  mqtt_client_certificate: ""
+  mqtt_client_key: ""
+  mqtt_topic_prefix: watermeter
+  mqtt_client_id: ""
+  ha_discovery: true
+  ha_discovery_prefix: homeassistant
+  ha_status_topic: homeassistant/status
+schema:
+  meter_id: match(^[0-9]{8}$)
+  aes_key: password
+  meter_name: str
+  frequency: str
+  fast_math: bool
+  algorithm: list(both|runlength|time2)
+  mqtt_auto: bool
+  mqtt_host: str
+  mqtt_port: port
+  mqtt_username: str
+  mqtt_password: password
+  mqtt_tls: bool
+  mqtt_ca_certificate: str
+  mqtt_client_certificate: str
+  mqtt_client_key: password
+  mqtt_topic_prefix: str
+  mqtt_client_id: str
+  ha_discovery: bool
+  ha_discovery_prefix: str
+  ha_status_topic: str

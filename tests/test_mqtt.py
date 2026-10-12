@@ -18,7 +18,7 @@ import paho.mqtt.client as mqtt
 from watermeter.mqtt import Publisher
 from watermeter.reading import accept, encode
 from watermeter.settings import Settings, secret
-from watermeter.discovery import messages
+from watermeter.discovery import SENSORS, messages
 
 
 def wait_for(predicate, timeout=12):
@@ -142,7 +142,9 @@ class MQTTIntegrationTests(unittest.TestCase):
         self.assertTrue(all(r[2] and r[3] == 1 for r in late.records))
         configs = [r for r in late.records if r[0].endswith("/config")]
         self.assertEqual(len(configs), discovery_count)
-        self.assertTrue(all(json.loads(r[1])["name"].endswith(" " + p.settings.meter_id) for r in configs))
+        self.assertEqual({json.loads(r[1])["name"] for r in configs}, {name for _, name, _ in SENSORS})
+        self.assertTrue(all(json.loads(r[1])["device"]["name"] ==
+                            "Diehl Hydrus 2.0 ID " + p.settings.meter_id for r in configs))
         first = s.records_for(p.settings.state_topic)[-1][1]
         count = len([r for r in s.records if r[0].endswith("/config")])
         p.submit(first)  # repeated absolute reading does not fabricate a delta
@@ -228,8 +230,8 @@ class MQTTIntegrationTests(unittest.TestCase):
         wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) == discovery_count)
         configs = [json.loads(r[1]) for r in s.records if r[0].endswith("/config")]
         self.assertTrue(all(c["unique_id"].startswith("diehl_hydrus_00123456_") for c in configs))
-        self.assertTrue(all(c["device"]["name"] == "Basement" for c in configs))
-        self.assertTrue(all(c["name"].endswith(" 00123456") for c in configs))
+        self.assertTrue(all(c["device"]["name"] == "Diehl Hydrus 2.0 ID 00123456" for c in configs))
+        self.assertEqual({c["name"] for c in configs}, {name for _, name, _ in SENSORS})
         wait_for(lambda: s.records_for(settings.state_topic))
         result = json.loads(s.records_for(settings.state_topic)[-1][1])
         self.assertNotIn("flow_temperature_c", result)
