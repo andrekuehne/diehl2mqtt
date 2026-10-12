@@ -61,6 +61,9 @@ jobs:
           cache-to: type=gha,scope=tests,mode=max
       - name: Run settings, security, lifecycle, offline-negative and real broker tests
         run: docker run --rm --network none --tmpfs /run/watermeter:mode=0700 watermeter:test
+      - name: Verify installed native LXC application layout
+        run: |
+          docker run --rm --network none --entrypoint /usr/bin/python3 --mount type=bind,src="$PWD/scripts/install-proxmox.py",dst=/tmp/install-proxmox.py,readonly --mount type=bind,src="$PWD/scripts/test-lxc-layout.py",dst=/tmp/test-lxc-layout.py,readonly watermeter:local /tmp/test-lxc-layout.py
       - name: Verify OCI archive conversion for direct Proxmox LXC
         run: |
           sudo apt-get update -qq
@@ -132,7 +135,8 @@ jobs:
           IMAGE: ${{ steps.image.outputs.reference }}
         run: |
           docker run --rm --network none --entrypoint cat watermeter:local /usr/share/watermeter/packages.txt > "$RUNNER_TEMP/packages.txt"
-          python3 scripts/package-release.py --version "$GITHUB_REF_NAME" --image "$IMAGE" --packages-file "$RUNNER_TEMP/packages.txt" --output "$RUNNER_TEMP/release"
+          docker run --rm --network none --entrypoint /usr/bin/python3 --mount type=bind,src="$PWD/scripts/package-app.py",dst=/tmp/package-app.py,readonly watermeter:local /tmp/package-app.py --version "$GITHUB_REF_NAME" --image "$IMAGE" > "$RUNNER_TEMP/app.tar.gz"
+          python3 scripts/package-release.py --version "$GITHUB_REF_NAME" --image "$IMAGE" --packages-file "$RUNNER_TEMP/packages.txt" --app-bundle "$RUNNER_TEMP/app.tar.gz" --output "$RUNNER_TEMP/release"
           tar -xzf "$RUNNER_TEMP/release/diehl2mqtt-$GITHUB_REF_NAME-deploy.tar.gz" -C "$RUNNER_TEMP"
           cd "$RUNNER_TEMP/diehl2mqtt-$GITHUB_REF_NAME"
           cp .env.example .env

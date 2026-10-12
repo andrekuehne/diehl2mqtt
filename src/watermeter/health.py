@@ -26,5 +26,18 @@ def healthy(root=Path("/run/watermeter")):
         return False
 
 
+def updating(root=Path('/run/watermeter')):
+    """Allow a short, live launcher's validation window during app replacement."""
+    try:
+        state = json.loads((root / 'rollout.json').read_text())
+        now = time.monotonic()
+        return (0 <= now - state['heartbeat'] < 5
+                and 0 < state['deadline'] - now <= 60
+                and state['started'] is not None
+                and identity(state['pid']) == state['started'])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 if __name__ == "__main__":
-    raise SystemExit(0 if healthy() else 1)
+    raise SystemExit(0 if healthy() or updating() else 1)

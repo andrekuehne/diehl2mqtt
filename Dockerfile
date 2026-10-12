@@ -45,6 +45,7 @@ COPY --from=build /provenance /usr/share/watermeter
 RUN dpkg-query -W > /usr/share/watermeter/packages.txt
 COPY src/ /opt/watermeter/
 COPY scripts/entrypoint.sh scripts/healthcheck.sh scripts/smoke-image.sh /usr/local/bin/
+COPY --chmod=755 scripts/update.sh /usr/local/bin/update
 COPY tests/fixtures/dme173_12345678.hex /usr/share/watermeter/fixture.hex
 ENV PATH="/opt/venv/bin:${PATH}" PYTHONPATH=/opt/watermeter PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 METER_ID=12345678 METER_DRIVER=dme173 METER_NAME=Water \
@@ -59,6 +60,7 @@ FROM runtime AS test
 RUN apt-get update && apt-get install -y --no-install-recommends mosquitto mosquitto-clients openssl \
     && rm -rf /var/lib/apt/lists/*
 COPY tests/ /tests/
+COPY scripts/package-app.py /tests/package-app.py
 WORKDIR /
 ENV WATERMETER_TEST_MQTT=1
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]

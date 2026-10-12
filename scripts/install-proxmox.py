@@ -23,7 +23,7 @@ import time
 import urllib.request
 import uuid
 
-DEFAULT_RELEASE = "v0.3.1"
+DEFAULT_RELEASE = "v0.4.0"
 REPOSITORY = "https://github.com/andrekuehne/diehl2mqtt"
 PVE_CONFIG = Path("/etc/pve/lxc")
 CONFIG_DIR = Path("/etc/diehl2mqtt-lxc")
@@ -176,6 +176,20 @@ def release_image(version):
                  r"ghcr\.io/andrekuehne/diehl2mqtt@sha256:[0-9a-f]{64}", "release image")
 
 
+def memory_value(value):
+    number = int(value)
+    if not 256 <= number <= 65536:
+        raise ValueError("RAM must be 256-65536 MiB")
+    return number
+
+
+def disk_value(value):
+    number = int(value)
+    if not 2 <= number <= 1024:
+        raise ValueError("Root disk must be 2-1024 GiB")
+    return number
+
+
 def collect_settings(args):
     if not sys.stdin.isatty():
         raise InstallError("Use an interactive terminal; do not pipe the script into Python")
@@ -183,6 +197,8 @@ def collect_settings(args):
     ctid = ctid_value(args.ctid or prompt("New CT ID", next_id, r"\d+"))
     check_unused(ctid)
     hostname = prompt("CT hostname", "diehl2mqtt", r"[a-zA-Z0-9][a-zA-Z0-9.-]{0,62}")
+    memory = memory_value(args.memory or prompt("RAM in MiB", "512", r"[0-9]+"))
+    disk = disk_value(args.disk or prompt("Root disk in GiB", "2", r"[0-9]+"))
     node = socket.gethostname().split(".")[0]
     valid(node, r"[a-zA-Z0-9][a-zA-Z0-9_-]*", "node name")
     stores = command_json("pvesh", "get", f"/nodes/{node}/storage", "--content", "rootdir",
@@ -228,6 +244,7 @@ def collect_settings(args):
         env["MQTT_USERNAME"] = prompt("MQTT username", pattern=r"[^\x00-\x20\x7f]+")
         env["MQTT_PASSWORD_FILE"] = "/etc/diehl2mqtt/secrets/mqtt_password"
     return {"ctid": ctid, "hostname": hostname, "storage": storage, "bridge": bridge,
+            "memory": memory, "disk": disk,
             "vlan": vlan, "address": address, "gateway": gateway, "usb": usb, "env": env,
             "release": args.release, "image": release_image(args.release),
             "marker": "d2m-" + uuid.uuid4().hex[:12]}
@@ -241,7 +258,8 @@ def create_command(settings, archive):
     if settings["vlan"]:
         network += f",tag={settings['vlan']}"
     return ["pct", "create", str(settings["ctid"]), str(archive), "--hostname", settings["hostname"],
-            "--rootfs", settings["storage"] + ":2", "--cores", "1", "--memory", "512",
+            "--rootfs", settings["storage"] + ":" + str(settings.get("disk", 2)),
+            "--cores", "1", "--memory", str(settings.get("memory", 512)),
             "--swap", "0", "--unprivileged", "1", "--net0", network, "--onboot", "0",
             "--tags", "diehl2mqtt;" + settings["marker"], "--start", "0"]
 
@@ -383,9 +401,55 @@ def install_units():
     run("systemctl", "daemon-reload")
 
 
+def bootstrap_updates(rootfs, release, image, owner):
+    """Prepare the new stopped guest; existing guests are never migrated implicitly."""
+    base = rootfs / "opt/diehl2mqtt"
+    if base.exists() or base.is_symlink():
+        raise InstallError("The new image already has a managed application tree")
+    valid(release, r"v[0-9]+\.[0-9]+\.[0-9]+", "release")
+    name = release + "-initial"
+    target = base / "releases" / name
+    target.mkdir(parents=True, mode=0o700)
+    # Keep the recovery launcher independent of application updates.
+    launcher = base / "launcher/watermeter"
+    launcher.mkdir(parents=True)
+    for filename in ("__init__.py", "lxc.py", "update.py", "health.py"):
+        source = rootfs / "opt/watermeter/watermeter" / filename
+        if source.is_symlink() or not source.is_file():
+            raise InstallError("Selected release does not support native LXC updates; use v0.4.0 or newer")
+        shutil.copyfile(source, launcher / filename)
+    for source, destination in (("opt/watermeter", "watermeter"), ("opt/venv", "venv"),
+                                ("usr/share/watermeter", "provenance")):
+        path = rootfs / source
+        if path.is_symlink() or not path.is_dir():
+            raise InstallError("Unexpected application image layout")
+        shutil.move(str(path), target / destination)
+        path.symlink_to("/opt/diehl2mqtt/current/" + destination)
+        os.chown(path, *owner, follow_symlinks=False)
+    (target / "bin").mkdir()
+    for filename in ("wmbusmeters", "rtl_wmbus", "entrypoint.sh", "healthcheck.sh"):
+        path = rootfs / "usr/local/bin" / filename
+        if path.is_symlink() or not path.is_file():
+            raise InstallError("Unexpected native binary layout")
+        path.rename(target / "bin" / filename)
+        path.symlink_to("/opt/diehl2mqtt/current/bin/" + filename)
+        os.chown(path, *owner, follow_symlinks=False)
+    (base / "current").symlink_to("releases/" + name)
+    metadata = {"format": 1, "version": release, "image": image}
+    (target / "bundle.json").write_text(json.dumps(metadata))
+    for path in [base, *base.rglob("*")]:
+        os.chown(path, *owner, follow_symlinks=False)
+    config = rootfs / "etc/diehl2mqtt/install.json"
+    if config.exists() or config.is_symlink():
+        raise InstallError("Refusing to overwrite guest update configuration")
+    config.write_text(json.dumps(dict(metadata, kind="diehl2mqtt-lxc", release=release)))
+    config.chmod(0o600)
+    os.chown(config, *owner)
+
+
 def show_plan(settings):
     print(f"\nCreate unprivileged CT {settings['ctid']}: {settings['hostname']}")
-    print(f"1 core, 512 MiB RAM, 2 GiB disk on {settings['storage']}")
+    print(f"1 core, {settings.get('memory', 512)} MiB RAM, {settings.get('disk', 2)} GiB disk on {settings['storage']}")
     print(f"Network: {settings['bridge']}, IPv4 {settings['address']}; USB port {settings['usb']['port']}")
     print(f"Release {settings['release']}, pinned image {settings['image']}")
     print("Install skopeo if needed. Detach only this SDR's DVB driver if active.")
@@ -432,6 +496,7 @@ def execute_install(settings):
         if password:
             write_secret(rootfs, "mqtt_password", password, owner)
         aes = password = ""
+        bootstrap_updates(rootfs, settings["release"], settings["image"], owner)
         run("pct", "unmount", ctid)
         mounted = False
         CONFIG_DIR.mkdir(mode=0o700, exist_ok=True)
@@ -466,6 +531,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", default=DEFAULT_RELEASE)
     parser.add_argument("--ctid", type=ctid_value)
+    parser.add_argument("--memory", type=memory_value, help="RAM in MiB (interactive default: 512)")
+    parser.add_argument("--disk", type=disk_value, help="Root disk in GiB (interactive default: 2)")
     parser.add_argument("--dry-run", action="store_true", help="Prompt/validate and show plan; make no changes")
     parser.add_argument("--check", action="store_true", help="Check PVE version and connected SDRs only")
     parser.add_argument("--manage", type=ctid_value, help=argparse.SUPPRESS)
