@@ -49,7 +49,7 @@ COPY --chmod=755 scripts/update.sh /usr/local/bin/update
 COPY tests/fixtures/dme173_12345678.hex /usr/share/watermeter/fixture.hex
 ENV PATH="/opt/venv/bin:${PATH}" PYTHONPATH=/opt/watermeter PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 METER_ID=12345678 METER_DRIVER=dme173 METER_NAME=Water \
-    WMBUS_FREQUENCY=868.95M WMBUS_MODE=c1 MQTT_ENABLED=false
+    WMBUS_FREQUENCY=868.95M WMBUS_MODE=c1 WMBUS_FAST_MATH=false WMBUS_ALGORITHM=both MQTT_ENABLED=false
 RUN smoke-image.sh
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["healthcheck.sh"]
@@ -68,7 +68,7 @@ CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
 
 # Home Assistant manages options, USB mapping, updates and the health watchdog.
 FROM runtime AS ha-addon
-ARG HA_ADDON_VERSION=0.6.0
+ARG HA_ADDON_VERSION=0.7.0
 LABEL io.hass.version="${HA_ADDON_VERSION}" \
       io.hass.type="addon" \
       io.hass.arch="amd64" \

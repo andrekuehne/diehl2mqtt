@@ -20,7 +20,7 @@ SPEC.loader.exec_module(app)
 class InterfaceTests(unittest.TestCase):
     def test_default_and_advanced_settings_keep_required_meter_prompts(self):
         import argparse
-        args = argparse.Namespace(ctid=None, memory=None, disk=None, release='v0.5.0')
+        args = argparse.Namespace(ctid=None, memory=None, disk=None, release='v0.7.0', fast_math=None, algorithm=None)
         cases = [
             ('default', ['00123456', 'broker.invalid', '1883', 'mqtt'], 512, 2),
             ('advanced', ['123', 'reader', '1024', '8', 'vmbr1', '42',
@@ -29,7 +29,8 @@ class InterfaceTests(unittest.TestCase):
         for mode, inputs, memory, disk in cases:
             with self.subTest(mode=mode), patch.object(app, 'UI', True), \
                  patch.object(app.sys.stdin, 'isatty', return_value=True), \
-                 patch.object(app, 'choose', side_effect=[mode, 'local-lvm', 'auth', 'false']), \
+                 patch.object(app, 'choose', side_effect=[mode, 'local-lvm'] +
+                              (['true', 'runlength'] if mode == 'advanced' else []) + ['auth', 'false']), \
                  patch.object(app, 'prompt', side_effect=inputs) as prompt, \
                  patch.object(app, 'command_json', side_effect=[123, [{'storage': 'local-lvm', 'active': 1}]]), \
                  patch.object(app, 'check_unused'), patch.object(app, 'check_exclusive'), \
@@ -40,12 +41,30 @@ class InterfaceTests(unittest.TestCase):
             self.assertEqual(settings['memory'], memory)
             self.assertEqual(settings['disk'], disk)
             self.assertEqual(settings['env']['METER_ID'], '00123456')
+            self.assertEqual(settings['env']['WMBUS_FAST_MATH'], 'true' if mode == 'advanced' else 'false')
+            self.assertEqual(settings['env']['WMBUS_ALGORITHM'], 'runlength' if mode == 'advanced' else 'both')
             meter = next(c for c in prompt.call_args_list if c.args[0] == 'Eight-digit Wireless M-Bus meter ID')
             self.assertEqual(len(meter.args), 1)
             if mode == 'advanced':
                 self.assertEqual(settings['bridge'], 'vmbr1')
                 self.assertEqual(settings['vlan'], '42')
                 self.assertEqual(settings['gateway'], '192.0.2.1')
+
+    def test_explicit_receiver_options_apply_to_default_setup(self):
+        import argparse
+        args = argparse.Namespace(ctid=None, memory=None, disk=None, release='v0.7.0',
+                                  fast_math='true', algorithm='time2')
+        with patch.object(app, 'UI', True), patch.object(app.sys.stdin, 'isatty', return_value=True), \
+             patch.object(app, 'choose', side_effect=['default', 'local-lvm', 'off']), \
+             patch.object(app, 'prompt', return_value='00123456'), \
+             patch.object(app, 'command_json', side_effect=[123, [{'storage': 'local-lvm', 'active': 1}]]), \
+             patch.object(app, 'check_unused'), patch.object(app, 'check_exclusive'), \
+             patch.object(app, 'select_device', return_value={'port': '1-2'}), \
+             patch.object(app, 'release_image', return_value='test-image'), \
+             patch.object(app.Path, 'exists', return_value=True):
+            settings = app.collect_settings(args)
+        self.assertEqual(settings['env']['WMBUS_FAST_MATH'], 'true')
+        self.assertEqual(settings['env']['WMBUS_ALGORITHM'], 'time2')
 
     @unittest.skipUnless(shutil.which('whiptail'), 'requires whiptail')
     def test_real_password_dialog_keeps_screen_and_value_separate(self):
@@ -71,10 +90,14 @@ class InterfaceTests(unittest.TestCase):
                                  preexec_fn=terminal)
         os.close(slave)
         try:
-            time.sleep(.25)
+            screen = b''
+            deadline = time.monotonic() + 5
+            while b'MQTT password' not in screen:
+                self.assertLess(time.monotonic(), deadline, 'Password dialog did not become ready')
+                if select.select([master], [], [], .1)[0]:
+                    screen += os.read(master, 65536)
             os.write(master, b'public-synthetic-password\r')
             output = child.communicate(timeout=5)[0]
-            screen = b''
             while select.select([master], [], [], .1)[0]:
                 try:
                     screen += os.read(master, 65536)

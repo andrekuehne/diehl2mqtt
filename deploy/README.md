@@ -39,9 +39,11 @@ For anonymous MQTT, omit `compose.mqtt.auth.yaml` and the password setup. For JS
 
 The default broker connection uses no TLS. For TLS configuration, USB permissions, Proxmox passthrough, health, cleanup and troubleshooting, see the full [project README](https://github.com/andrekuehne/diehl2mqtt#readme). The receiver needs exclusive access to the dongle. Run only one instance for this meter/MQTT client identity.
 
-MQTT publishes the complete decoded telegram as retained JSON. Home Assistant discovers ten sensors for current/stored readings, dates and diagnostics; every name ends with your meter ID. New entity IDs place it immediately after `diehl_hydrus`, for example `sensor.diehl_hydrus_12345678_total_m3`. Status exposes the complete JSON as attributes. Optional values remain unknown when absent. Existing entity identities are preserved; Home Assistant only applies default entity IDs when first registering an entity.
+MQTT publishes the complete decoded telegram as retained JSON. Home Assistant discovers ten sensors for current/stored readings, dates and diagnostics. Entity IDs place your meter ID immediately after `diehl_hydrus`, for example `sensor.diehl_hydrus_12345678_total_m3`. Status exposes the complete JSON as attributes. Optional values remain unknown when absent. Existing entity identities are preserved; Home Assistant only applies default entity IDs when first registering an entity.
 
 In Home Assistant, find the `Diehl Hydrus 2.0 ID <your meter ID>` device under MQTT. Sensor names omit the ID; entity IDs retain it. Total water uses `m³`, `water` and `total_increasing`. If your Recorder has an include whitelist, include this sensor before adding it under Energy → Water consumption. Check States and Statistics if it does not appear.
+
+To tune SDR CPU use in Docker (v0.7.0+), set `WMBUS_FAST_MATH=true` and `WMBUS_ALGORITHM=both` in `.env`, then recreate the container with the same Compose `up -d --wait` command. No compilation is needed. Defaults are `false` and `both`. The algorithm also accepts `runlength` or `time2` to run just one demodulation method. Approximate math and fewer algorithms may affect reception; compare fresh readings and gaps before keeping the change. Use the new release's Compose files as well as its image. See the [tuning guide](https://github.com/andrekuehne/diehl2mqtt#reduce-sdr-cpu-use).
 
 For direct **Proxmox VE 9.1+ without Docker**, connect the SDR to the node and run this as root in the **Proxmox node shell**:
 

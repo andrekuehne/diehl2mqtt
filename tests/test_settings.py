@@ -10,6 +10,22 @@ from watermeter.reading import accept, InvalidReading
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_receiver_tuning_reaches_pipeline_with_and_without_mqtt(self):
+        from watermeter.supervisor import Supervisor
+        for mqtt in (False, True):
+            env = {'MQTT_ENABLED': str(mqtt), 'MQTT_HOST': 'broker.invalid'}
+            default = Settings.load(env)
+            self.assertEqual((default.fast_math, default.algorithm), (False, 'both'))
+            for fast_math in (False, True):
+                for algorithm, flags in (('both', []), ('runlength', ['-t', '0']), ('time2', ['-r', '0'])):
+                    with self.subTest(mqtt=mqtt, fast_math=fast_math, algorithm=algorithm):
+                        settings = Settings.load(env | {'WMBUS_FAST_MATH': str(fast_math),
+                                                        'WMBUS_ALGORITHM': algorithm})
+                        pipeline = Supervisor(settings, {}, '/private/config', '/unused').commands
+                        self.assertEqual(pipeline[1], ['rtl_wmbus', '-f', '-p', 'S'] +
+                                         (['-a'] if fast_math else []) + flags)
+                        self.assertEqual(pipeline[0], ['rtl_sdr', '-f', '868.95M', '-s', '1600000', '-'])
+
     def test_aes_validation_and_precedence(self):
         key = secrets.token_hex(16)
         for bad in ("", key[:-1], key + " ", key + "\n", "g" * 32):
@@ -43,7 +59,9 @@ class ConfigurationTests(unittest.TestCase):
         for name, value in (("METER_ID", "123"), ("METER_ID", "12345678\n"),
                             ("METER_NAME", "X\nkey=bad"), ("METER_NAME", "X=bad"),
                             ("METER_DRIVER", "auto"), ("WMBUS_MODE", "t1"),
-                            ("WMBUS_FREQUENCY", "868.95M;id"), ("MQTT_ENABLED", "maybe")):
+                            ("WMBUS_FREQUENCY", "868.95M;id"), ("MQTT_ENABLED", "maybe"),
+                            ("WMBUS_FAST_MATH", "maybe"), ("WMBUS_ALGORITHM", ""),
+                            ("WMBUS_ALGORITHM", "none"), ("WMBUS_ALGORITHM", "both -a")):
             with self.subTest(name=name), self.assertRaises(ConfigError):
                 Settings.load({name: value})
         self.assertFalse(Settings.load({"MQTT_HOST": ""}).mqtt)

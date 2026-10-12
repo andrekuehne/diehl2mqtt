@@ -22,9 +22,16 @@ class Supervisor:
     def __init__(self, settings, env, config, root, publisher=None, commands=None):
         self.settings, self.env, self.config, self.root = settings, env, config, Path(root)
         self.publisher = publisher
+        demodulator = ["rtl_wmbus", "-f", "-p", "S"]
+        if settings.fast_math:
+            demodulator.append("-a")
+        if settings.algorithm == "runlength":
+            demodulator.extend(["-t", "0"])
+        elif settings.algorithm == "time2":
+            demodulator.extend(["-r", "0"])
         self.commands = commands or [
             ["rtl_sdr", "-f", settings.frequency, "-s", "1600000", "-"],
-            ["rtl_wmbus", "-f", "-p", "S"],
+            demodulator,
             ["wmbusmeters", f"--useconfig={config}"],
         ]
         self.children = []
@@ -109,6 +116,7 @@ class Supervisor:
                 self.publisher.set_alive(True)
                 self.publisher.start()
             log("Receiver running: C1 at configured frequency; waiting for decrypted telegrams")
+            log(f"Demodulator: algorithm={self.settings.algorithm}, fast_math={str(self.settings.fast_math).lower()}")
             while not self.stop_signal:
                 if any(child.poll() is not None for child in self.children):
                     log("Pipeline member exited unexpectedly; restarting container is required")

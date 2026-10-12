@@ -55,9 +55,17 @@ class AddonTests(unittest.TestCase):
         self.assertFalse(custom.discovery)
         self.assertEqual(custom.status_topic, 'custom/birth')
 
+    def test_runtime_demodulator_options_and_existing_option_defaults(self):
+        settings, _, _ = self.configure()
+        self.assertEqual((settings.fast_math, settings.algorithm), (False, 'both'))
+        for algorithm in ('both', 'runlength', 'time2'):
+            settings, _, _ = self.configure(fast_math=True, algorithm=algorithm)
+            self.assertEqual((settings.fast_math, settings.algorithm), (True, algorithm))
+
     def test_invalid_options_never_echo_values(self):
         for changes in ({'meter_id': 12345678}, {'meter_id': ''}, {'aes_key': 'bad-secret'},
                         {'mqtt_port': True}, {'mqtt_port': 0}, {'mqtt_auto': 'false'},
+                        {'fast_math': 'true'}, {'algorithm': False}, {'algorithm': 'both -a'},
                         {'mqtt_password': 'bad\npassword'}, {'mqtt_host': 'mqtt://secret.invalid'},
                         {'mqtt_username': ''}, {'mqtt_client_key': 'private-key-without-certificate'}):
             with self.subTest(changes=list(changes)):

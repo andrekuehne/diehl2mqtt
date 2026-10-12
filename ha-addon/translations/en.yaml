@@ -11,6 +11,12 @@ configuration:
   frequency:
     name: Radio frequency
     description: Wireless M-Bus frequency, normally 868.95M. DME173/C1 is fixed.
+  fast_math:
+    name: Fast demodulator math
+    description: Use approximate atan to reduce CPU use. Off by default; compare reception before keeping it enabled.
+  algorithm:
+    name: Demodulator algorithms
+    description: Both maximizes reception diversity (default). Runlength or time2 runs only that algorithm to reduce CPU use.
   mqtt_auto:
     name: Automatic MQTT configuration
     description: Use the Supervisor MQTT service (normally the Mosquitto app). Disable for manual broker settings.

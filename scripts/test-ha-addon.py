@@ -27,6 +27,8 @@ if name == 'rtl_sdr':
         sys.exit(1)
 if name == 'wmbusmeters':
     print('{"_":"telegram","meter":"dme173","id":"00123456","total_m3":1.2}', flush=True)
+if name == 'rtl_wmbus':
+    assert sys.argv[1:] == ['-f', '-p', 'S', '-a', '-t', '0']
 while True:
     time.sleep(0.1)
 '''
@@ -38,7 +40,7 @@ data = Path('/data')
 data.mkdir(exist_ok=True)
 (data / 'options.json').write_text(json.dumps(dict(
     meter_id='00123456', aes_key='00112233445566778899aabbccddeeff',
-    mqtt_auto=False, mqtt_host='127.0.0.1', mqtt_port=9)))
+    mqtt_auto=False, mqtt_host='127.0.0.1', mqtt_port=9, fast_math=True, algorithm='runlength')))
 env = dict(os.environ, PATH=str(bin_dir) + ':' + os.environ['PATH'], SUPERVISOR_TOKEN='synthetic-token')
 out = root / 'stdout'
 err = root / 'stderr'
