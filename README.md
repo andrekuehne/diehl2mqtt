@@ -2,7 +2,7 @@
 
 Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1, and emit newline-delimited JSON. Optional MQTT publishes the complete decoded telegram and automatically discovers ten Home Assistant sensors for readings, stored values, dates and diagnostics. The actual image, connected R820T dongle, fixture, Compose restarts and authenticated live MQTT delivery were tested on the owner's Ubuntu host. See [verification](docs/verification.md) for evidence and remaining external checks.
 
-## Deploy a published image
+## Install on Proxmox VE 9.1+ (no Docker)
 
 For **Proxmox VE 9.1+ without nested Docker**, use the interactive [direct LXC installer](docs/proxmox.md). It imports the published image into an unprivileged LXC and sets up the selected SDR, runtime secrets and host monitoring. RAM/disk allocation is configurable, and new installations include an internal `update` command with automatic rollback. Proxmox application-container support is a technology preview; destination-node testing is still required.
 
@@ -12,11 +12,44 @@ Run this as root in the **Proxmox node shell**:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)"
 ```
 
-The setup offers Default/Advanced settings, dialog inputs and hidden secret fields. Choose Advanced to change RAM, disk and networking. Inside the installed LXC, use `update` for application updates.
+This installs the current **v0.5.0** release. Connect the RTL-SDR to that Proxmox node first. Run the command on the node itself, not on your desktop or inside another guest.
+
+The setup offers Default/Advanced settings, dialog inputs and hidden secret fields. Default allocation is **1 CPU, 512 MiB RAM and 2 GiB disk**, with DHCP on `vmbr0`. **256 MiB RAM is a reasonable smaller allocation** based on a simulated runtime/update-staging check (about 73 MiB running, 105 MiB peak); actual reception on your node still needs verification. Choose Advanced to set RAM to 256 MiB and customize disk/networking, or supply the allocation directly:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)" -- --memory 256 --disk 2
+```
+
+During setup, supply your **eight-digit Wireless M-Bus meter ID** (keep leading zeros), MQTT broker address/port/username and, in hidden fields, your **32-character hexadecimal AES key** and MQTT password. No real meter ID or secret is preset. Review the CT summary before confirming creation.
+
+After installation, open a shell inside the new LXC from the Proxmox node (replace `CTID` with its number):
+
+```bash
+pct exec CTID -- /bin/bash
+```
+
+Inside the LXC, application updates use:
+
+```bash
+update --check
+update
+update --status
+```
+
+Check the reader's console and a fresh MQTT/Home Assistant reading using the [Proxmox verification instructions](docs/proxmox.md#check-the-deployment). Application updates preserve the CT and secrets; OS refreshes and older installations are covered in that guide.
+
+## Install with Docker Engine + Compose (Linux amd64)
 
 For another Linux **amd64** host, install [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin and connect or pass through the RTL-SDR. arm64 is deferred. The deployment archive contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts.
 
-Download and unpack the release (this example installs `v0.5.0`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
+For Ubuntu, follow [Docker's official Engine and Compose installation commands](https://docs.docker.com/engine/install/ubuntu/) first. Confirm Docker is running and your user can access it:
+
+```bash
+docker version
+docker compose version
+```
+
+Download, verify and unpack the current **v0.5.0** release into a new directory (see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for later versions):
 
 ```bash
 mkdir diehl2mqtt-install
@@ -27,6 +60,8 @@ sha256sum --ignore-missing --check SHA256SUMS
 tar -xzf diehl2mqtt-v0.5.0-deploy.tar.gz
 cd diehl2mqtt-v0.5.0
 cp .env.example .env
+chmod 600 .env
+nano .env
 ```
 
 Edit `.env` with your meter and broker details. For example (replace the ID and broker address with your own):
@@ -62,7 +97,9 @@ docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml lo
 
 No registry login or local build is needed. Stop following logs with Ctrl+C; the container keeps running. Use the same Compose file list with `down` to stop/remove it. For anonymous MQTT omit the auth override and password setup; for JSON-only use just the base file and AES key. If Home Assistant Recorder has an include whitelist, include Total water before adding it to Energy.
 
-The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.1.0`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration.
+The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.5.0`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration. Docker upgrades use a new release's image digest and `pull`/`up`; the LXC's `update` command is for native LXC installations only.
+
+### Deploy from a source checkout
 
 If using this source checkout's Compose files instead, copy `.env.example` to `.env.local`, set `WATERMETER_IMAGE` to the published digest plus your broker/meter options, and run the secret setup scripts. Then:
 
@@ -112,12 +149,13 @@ docs/verification.md                  PASS/FAIL/NOT RUN evidence
 
 `secrets/` and `.env.local` are local, ignored inputs; they are excluded from Docker context and Git. No production key is included in examples, fixtures, images, builds or commits. The encrypted fixture uses dummy ID `12345678` and public test key `00112233445566778899aabbccddeeff`; never use that test key for a real meter.
 
-## Ubuntu quick start
+## Build from source on Ubuntu (optional)
 
 Install Docker Engine and the Compose plugin from [Docker's Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/). Docker must be running and your account must have daemon access. Docker-group membership is root-equivalent; use your usual approved Docker access arrangement. Re-login after changing group membership. USB commands below require Linux Docker Engine, not an assumed USB forwarding layer in Docker Desktop.
 
 ```bash
-cd /home/andre/Projects/Watermeter-Docker
+git clone https://github.com/andrekuehne/diehl2mqtt.git
+cd diehl2mqtt
 docker build --pull -t watermeter:local .
 ./scripts/setup-secret.sh
 ./scripts/test-offline.sh

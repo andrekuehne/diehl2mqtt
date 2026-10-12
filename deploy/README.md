@@ -43,7 +43,13 @@ MQTT publishes the complete decoded telegram as retained JSON. Home Assistant di
 
 In Home Assistant, find the Water device under MQTT. Total water uses `m³`, `water` and `total_increasing`. If your Recorder has an include whitelist, include this sensor before adding it under Energy → Water consumption. Check States and Statistics if it does not appear.
 
-For direct Proxmox VE 9.1+ installation without Docker, run the included `python3 scripts/install-proxmox.py` as root on the node with the SDR. See the [Proxmox instructions](https://github.com/andrekuehne/diehl2mqtt/blob/main/docs/proxmox.md) for preview limitations, preflight and operations.
+For direct **Proxmox VE 9.1+ without Docker**, connect the SDR to the node and run this as root in the **Proxmox node shell**:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)" -- --memory 256 --disk 2
+```
+
+The dialog setup asks for your meter ID, broker settings and hidden AES/MQTT secrets. This command requests 256 MiB RAM and 2 GiB disk; omitting those options uses the conservative 512 MiB RAM default. You can also launch the included wrapper with `bash ct/diehl2mqtt.sh --memory 256 --disk 2`, or use `python3 scripts/install-proxmox.py --plain` for plain prompts. Run `update` inside the installed LXC for application updates. See the [Proxmox instructions](https://github.com/andrekuehne/diehl2mqtt/blob/main/docs/proxmox.md) for preflight, verification and operations.
 
 To stop:
 
