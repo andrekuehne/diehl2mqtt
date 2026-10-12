@@ -4,15 +4,23 @@ Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1
 
 ## Install as a Home Assistant add-on (amd64)
 
-On **Home Assistant OS**, pass the RTL-SDR through to the HA VM, then add this repository URL in the app/add-on store's **Repositories** menu:
+Requires **Home Assistant OS on amd64** and a supported RTL-SDR. For a Proxmox HA VM, pass the dongle through under **VM → Hardware → Add → USB Device**. Stop any previous Docker/LXC reader and its automatic monitoring before moving the dongle; see the [migration commands](ha-addon/DOCS.md#installation).
+
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fandrekuehne%2Fdiehl2mqtt)
+
+1. Click the button above. My Home Assistant opens your local instance with this repository URL prefilled. If prompted, enter your Home Assistant URL, then confirm **Add** in Home Assistant.
+2. In the app/add-on store, find **Diehl Hydrus to MQTT** and select **Install**. Refresh the store if it does not appear immediately.
+3. Open **Configuration**. Enter your own **eight-digit meter ID** (preserve leading zeros) and **32-hex-character AES key**. All settings, passwords and keys are entered here; no terminal secret setup is needed.
+4. For a running Supervisor MQTT service such as Mosquitto, keep `mqtt_auto: true`. For another broker, disable it and enter the hostname, port, username/password and TLS settings. Keep the existing topic prefixes when migrating.
+5. Save, then **Start**. Enable **Start on boot** and **Watchdog**. Check **Log** and confirm a fresh **Last received** timestamp on the MQTT device in Home Assistant.
+
+Manual alternative: open **Settings → Apps** (called **Add-ons** in older versions) → **App/Add-on store → ⋮ → Repositories**, paste the URL below and select **Add**, then continue at step 2:
 
 ```text
 https://github.com/andrekuehne/diehl2mqtt
 ```
 
-Install **Diehl Hydrus to MQTT**, open its **Configuration** tab, enter your own eight-digit meter ID and 32-hex-character AES key, then save and start it. All broker settings, passwords, TLS certificate/key text and MQTT/discovery options are configured in that tab too. Automatic MQTT uses Supervisor's registered MQTT service; disable it to supply a manual broker. Enable Start on boot and Watchdog. Update through Home Assistant's normal add-on update button.
-
-Stop the previous reader and its automatic monitoring **before** moving the dongle. The add-on keeps the same MQTT paths, device identity and all ten sensor entity IDs. Keep the same broker, meter ID and topic settings to reuse existing entities. No terminal secret setup is needed. See the [add-on documentation](ha-addon/DOCS.md) for migration commands, full configuration and troubleshooting. This first version is experimental pending actual HA OS USB/reboot validation; arm64 remains deferred.
+Update through Home Assistant's normal app/add-on update button. The add-on keeps the same MQTT paths, device identity and all ten sensor entity IDs. Keep the same broker, meter ID and topic settings to reuse existing entities. See the [add-on documentation](ha-addon/DOCS.md) for full configuration, CPU tuning and troubleshooting. The add-on is experimental pending actual HA OS USB/reboot validation; arm64 remains deferred.
 
 ## Install on Proxmox VE 9.1+ (no Docker)
 
@@ -24,7 +32,7 @@ Run this as root in the **Proxmox node shell**:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)"
 ```
 
-This installs the current **v0.6.0** release. Connect the RTL-SDR to that Proxmox node first. Run the command on the node itself, not on your desktop or inside another guest.
+This installs the current **v0.7.0** release. Connect the RTL-SDR to that Proxmox node first. Run the command on the node itself, not on your desktop or inside another guest.
 
 The setup offers Default/Advanced settings, dialog inputs and hidden secret fields. Default allocation is **1 CPU, 512 MiB RAM and 2 GiB disk**, with DHCP on `vmbr0`. **256 MiB RAM is a reasonable smaller allocation** based on a simulated runtime/update-staging check (about 73 MiB running, 105 MiB peak); actual reception on your node still needs verification. Choose Advanced to set RAM to 256 MiB and customize disk/networking, or supply the allocation directly:
 
@@ -61,16 +69,16 @@ docker version
 docker compose version
 ```
 
-Download, verify and unpack the current **v0.6.0** release into a new directory (see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for later versions):
+Download, verify and unpack the current **v0.7.0** release into a new directory (see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for later versions):
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.6.0/diehl2mqtt-v0.6.0-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.6.0/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.7.0/diehl2mqtt-v0.7.0-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.7.0/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.6.0-deploy.tar.gz
-cd diehl2mqtt-v0.6.0
+tar -xzf diehl2mqtt-v0.7.0-deploy.tar.gz
+cd diehl2mqtt-v0.7.0
 cp .env.example .env
 chmod 600 .env
 nano .env
@@ -109,7 +117,7 @@ docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml lo
 
 No registry login or local build is needed. Stop following logs with Ctrl+C; the container keeps running. Use the same Compose file list with `down` to stop/remove it. For anonymous MQTT omit the auth override and password setup; for JSON-only use just the base file and AES key. If Home Assistant Recorder has an include whitelist, include Total water before adding it to Energy.
 
-The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.6.0`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration. Docker upgrades use a new release's image digest and `pull`/`up`; the LXC's `update` command is for native LXC installations only.
+The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.7.0`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration. Docker upgrades use a new release's image digest and `pull`/`up`; the LXC's `update` command is for native LXC installations only.
 
 ### Deploy from a source checkout
 
@@ -132,6 +140,32 @@ RTL2832U USB → rtl_sdr (868.95 MHz / 1.6 Msps) → rtl_wmbus
 ```
 
 Defaults: ID `12345678` (eight-character string), driver `dme173`, name `Water`, frequency `868.95M`, mode `c1`. No autodetection or retuning replaces these defaults. MQTT defaults off. An AES secret alone is sufficient for JSON-only operation. Only this meter driver and C1 mode are supported; the ID, name and frequency may be overridden with validated environment values.
+
+### Reduce SDR CPU use
+
+The radio processes 1.6 million samples per second continuously, even between telegrams. Most CPU time is in `rtl_wmbus`. Version v0.7.0 exposes two **runtime** settings; no recompilation is needed:
+
+| Setting | Values | Default |
+| --- | --- | --- |
+| `WMBUS_FAST_MATH` | `true` uses approximate atan; `false` uses accurate math | `false` |
+| `WMBUS_ALGORITHM` | `both`, `runlength`, or `time2` | `both` |
+
+Start by enabling fast math while keeping both algorithms. A short live test on a 13th-generation Intel desktop reduced total pipeline CPU from about 19% to 11% of one core. Fast math plus runlength alone used about 9%. In a separate 65-second comparison the tested settings recovered the same two distinct CRC-valid telegrams. This small sample does not establish weak-signal performance; compare fresh readings and reception gaps on your installation. Both algorithms with accurate math remain the defaults. `time2` alone is selectable but was not part of that reception comparison. These algorithms are demodulation methods; meter driver and C1 mode stay fixed.
+
+**Docker:** add to the deployment's `.env` (or your source checkout's `.env.local`):
+
+```dotenv
+WMBUS_FAST_MATH=true
+WMBUS_ALGORITHM=both
+```
+
+Recreate the container with the same Compose file list and `up -d --wait` (source checkout: also use `--env-file .env.local` and `--no-build`). A plain `docker restart` does not reload `.env`. When upgrading an older deployment, use v0.7.0 or newer Compose files as well as its image; older files do not pass these settings through.
+
+**LXC:** the installer offers these options under Advanced, or accepts `--fast-math true --algorithm both`. For an existing LXC, first update the app to v0.7.0 or newer, then set these environment values in its Proxmox configuration and restart it. See [LXC tuning commands](docs/proxmox.md#demodulator-tuning).
+
+**Home Assistant add-on:** update to 0.7.0 or newer, then set **Fast demodulator math** and **Demodulator algorithms** in Configuration, save and restart. The YAML keys are `fast_math` and `algorithm`. Existing options without these keys keep the original defaults.
+
+The startup log shows the selected algorithm and math setting. MQTT topics, sensor identities and decoded JSON remain the same.
 
 ## Files
 
@@ -422,8 +456,8 @@ Successful main pushes and scheduled builds automatically publish `latest` to GH
 To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
 
 ```bash
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.7.0
+git push origin v0.7.0
 ```
 
 When changing the installer release, update `DEFAULT_RELEASE` in `scripts/install-proxmox.py` and the release/SHA256 pins in `ct/diehl2mqtt.sh` together. Host tests enforce matching pins.
