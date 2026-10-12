@@ -18,6 +18,7 @@ import paho.mqtt.client as mqtt
 from watermeter.mqtt import Publisher
 from watermeter.reading import accept, encode
 from watermeter.settings import Settings, secret
+from watermeter.discovery import messages
 
 
 def wait_for(predicate, timeout=12):
@@ -136,17 +137,19 @@ class MQTTIntegrationTests(unittest.TestCase):
         p.submit(self.payload())
         wait_for(lambda: s.records_for(p.settings.state_topic))
         late = self.subscriber()
-        wait_for(lambda: len(late.records) >= 5)
+        discovery_count = len(list(messages(p.settings)))
+        wait_for(lambda: len(late.records) >= discovery_count + 2)
         self.assertTrue(all(r[2] and r[3] == 1 for r in late.records))
         configs = [r for r in late.records if r[0].endswith("/config")]
-        self.assertEqual(len(configs), 3)
+        self.assertEqual(len(configs), discovery_count)
+        self.assertTrue(all(json.loads(r[1])["name"].endswith(" " + p.settings.meter_id) for r in configs))
         first = s.records_for(p.settings.state_topic)[-1][1]
         count = len([r for r in s.records if r[0].endswith("/config")])
         p.submit(first)  # repeated absolute reading does not fabricate a delta
         wait_for(lambda: len(s.records_for(p.settings.state_topic)) >= 2)
         self.assertEqual(count, len([r for r in s.records if r[0].endswith("/config")]))
         s.client.publish(p.settings.status_topic, "online", qos=1).wait_for_publish(3)
-        wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) >= count + 3)
+        wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) >= count + discovery_count)
         wait_for(lambda: len(s.records_for(p.settings.state_topic)) >= 3)
         self.assertEqual(s.records_for(p.settings.state_topic)[-1][1], first)
         self.assertGreaterEqual(p.acknowledged, 10)
@@ -155,6 +158,30 @@ class MQTTIntegrationTests(unittest.TestCase):
         late2 = self.subscriber()
         wait_for(lambda: late2.records_for(p.settings.availability_topic))
         self.assertEqual(late2.records_for(p.settings.availability_topic)[-1][1], "offline")
+
+    def test_complete_decoded_telegram_is_retained_and_replayed(self):
+        self.broker.start()
+        p = self.publisher()
+        raw = json.loads(Path("tests/fixtures/reading.json").read_text()) | {
+            "total_backward_m3": 0.012, "total_at_set_date_m3": 0.15,
+            "set_date": "2025-12-31", "timestamp": "2026-10-12T12:00:00Z",
+            "extra_decoder_data": {"counter": 7, "flags": ["OK"]},
+        }
+        accepted = accept(encode(raw), p.settings)
+        p.submit(encode(accepted))
+        s = self.subscriber()
+        wait_for(lambda: s.records_for(p.settings.state_topic))
+        self.assertEqual(json.loads(s.records_for(p.settings.state_topic)[-1][1]), accepted)
+        for field, value in raw.items():
+            self.assertEqual(accepted[field], value)
+        late = self.subscriber()
+        wait_for(lambda: late.records_for(p.settings.state_topic))
+        retained = late.records_for(p.settings.state_topic)[-1]
+        self.assertTrue(retained[2])
+        self.assertEqual(json.loads(retained[1]), accepted)
+        s.client.publish(p.settings.status_topic, "online", qos=1).wait_for_publish(3)
+        wait_for(lambda: len(s.records_for(p.settings.state_topic)) >= 2)
+        self.assertEqual(json.loads(s.records_for(p.settings.state_topic)[-1][1]), accepted)
 
     def test_initial_absence_restart_and_bounded_cache(self):
         p = self.publisher()
@@ -174,7 +201,7 @@ class MQTTIntegrationTests(unittest.TestCase):
         late = self.subscriber()
         wait_for(lambda: late.records_for(p.settings.state_topic), 15)
         self.assertEqual(late.records_for(p.settings.state_topic)[-1][1], latest)
-        wait_for(lambda: len([r for r in late.records if r[0].endswith("/config")]) == 3)
+        wait_for(lambda: len([r for r in late.records if r[0].endswith("/config")]) == len(list(messages(p.settings))))
 
     def test_discovery_disabled_and_overrides(self):
         self.broker.start()
@@ -197,16 +224,18 @@ class MQTTIntegrationTests(unittest.TestCase):
         reading.pop("flow_temperature_c")
         reading["status"] = None
         p.submit(encode(reading))
-        wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) == 3)
+        discovery_count = len(list(messages(settings)))
+        wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) == discovery_count)
         configs = [json.loads(r[1]) for r in s.records if r[0].endswith("/config")]
         self.assertTrue(all(c["unique_id"].startswith("diehl_hydrus_00123456_") for c in configs))
         self.assertTrue(all(c["device"]["name"] == "Basement" for c in configs))
+        self.assertTrue(all(c["name"].endswith(" 00123456") for c in configs))
         wait_for(lambda: s.records_for(settings.state_topic))
         result = json.loads(s.records_for(settings.state_topic)[-1][1])
         self.assertNotIn("flow_temperature_c", result)
         self.assertIsNone(result["status"])
         s.client.publish("custom/birth", "online", qos=1).wait_for_publish(3)
-        wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) >= 6)
+        wait_for(lambda: len([r for r in s.records if r[0].endswith("/config")]) >= 2 * discovery_count)
         wait_for(lambda: len(s.records_for(settings.state_topic)) >= 2)
         self.assertEqual(json.loads(s.records_for(settings.state_topic)[-1][1]), reading)
 

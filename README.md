@@ -1,6 +1,6 @@
 # Diehl HYDRUS water meter gateway
 
-Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1, and emit newline-delimited JSON. Optional MQTT publishes retained readings and automatically discovers three Home Assistant sensors. The actual image, connected R820T dongle, fixture, Compose restarts and authenticated live MQTT delivery were tested on the owner's Ubuntu host. See [verification](docs/verification.md) for evidence and remaining external checks.
+Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1, and emit newline-delimited JSON. Optional MQTT publishes the complete decoded telegram and automatically discovers ten Home Assistant sensors for readings, stored values, dates and diagnostics. The actual image, connected R820T dongle, fixture, Compose restarts and authenticated live MQTT delivery were tested on the owner's Ubuntu host. See [verification](docs/verification.md) for evidence and remaining external checks.
 
 ## Deploy a published image
 
@@ -8,16 +8,16 @@ For **Proxmox VE 9.1+ without nested Docker**, use the interactive [direct LXC i
 
 For another Linux **amd64** host, install [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin and connect or pass through the RTL-SDR. arm64 is deferred. The deployment archive contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts.
 
-Download and unpack the release (this example installs `v0.2.0`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
+Download and unpack the release (this example installs `v0.3.0`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.2.0/diehl2mqtt-v0.2.0-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.2.0/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.3.0/diehl2mqtt-v0.3.0-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.3.0/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.2.0-deploy.tar.gz
-cd diehl2mqtt-v0.2.0
+tar -xzf diehl2mqtt-v0.3.0-deploy.tar.gz
+cd diehl2mqtt-v0.3.0
 cp .env.example .env
 ```
 
@@ -244,9 +244,16 @@ watermeter/12345678/availability
 homeassistant/sensor/diehl_hydrus_12345678_total_m3/config
 homeassistant/sensor/diehl_hydrus_12345678_flow_temperature_c/config
 homeassistant/sensor/diehl_hydrus_12345678_status/config
+homeassistant/sensor/diehl_hydrus_12345678_target_m3/config
+homeassistant/sensor/diehl_hydrus_12345678_target_datetime/config
+homeassistant/sensor/diehl_hydrus_12345678_total_at_set_date_m3/config
+homeassistant/sensor/diehl_hydrus_12345678_set_date/config
+homeassistant/sensor/diehl_hydrus_12345678_total_backward_m3/config
+homeassistant/sensor/diehl_hydrus_12345678_timestamp/config
+homeassistant/sensor/diehl_hydrus_12345678_received_at/config
 ```
 
-And **subscribe** to `homeassistant/status`. Adjust exact paths for configured prefixes/ID/status topic. A separate observation client additionally needs read access to these five device topics. No broad wildcard publish permission is needed.
+And **subscribe** to `homeassistant/status`. Adjust exact paths for configured prefixes/ID/status topic. A separate observation client additionally needs read access to these twelve device topics. No broad wildcard publish permission is needed. Broker ACLs written for v0.2.0's three discovery topics need the seven additional exact discovery topics above.
 
 The shared device is Diehl Metering / HYDRUS 2.0 / DME173 with identifier `diehl_hydrus_12345678`. Discovery creates:
 
@@ -255,12 +262,23 @@ The shared device is Diehl Metering / HYDRUS 2.0 / DME173 with identifier `diehl
 | Total water | `_total_m3` | m³ | water | total_increasing |
 | Flow temperature | `_flow_temperature_c` | °C | temperature | measurement |
 | Status (diagnostic) | `_status` | — | — | — |
+| Billing period water | `_target_m3` | m³ | water | — |
+| Billing period date | `_target_datetime` | — | — | — |
+| Water at set date | `_total_at_set_date_m3` | m³ | water | — |
+| Set date | `_set_date` | — | date | — |
+| Backward water | `_total_backward_m3` | m³ | water | — |
+| Decoder timestamp (diagnostic) | `_timestamp` | — | timestamp | — |
+| Last received (diagnostic) | `_received_at` | — | timestamp | — |
 
-Absolute totals are published, so repeats never fabricate consumption increments. Invalid/nonfinite numbers are rejected; absent/null optional values are unknown, not zero. No `expire_after` is inferred from a short test. `target_m3`, `target_datetime` and other fields remain in state JSON without initial discovery entities.
+Every sensor name ends with the configured meter ID, for example `Total water 12345678`. Newly discovered entities use IDs such as `sensor.diehl_hydrus_total_m3_12345678`; leading zeros are preserved. Existing unique IDs and discovery topics are unchanged, so upgrades update the same entities. Home Assistant preserves an existing entity ID or user-customized name: if an older entity also needs the suffix in its ID, rename it in its entity settings without deleting it. The [MQTT sensor reference](https://www.home-assistant.io/integrations/sensor.mqtt/#default_entity_id) explains that the default entity ID is applied on first registration only.
+
+The retained state JSON contains **every field emitted by the pinned decoder**, including meter metadata, original timestamps and additional future fields, plus gateway `driver` and `received_at`. Status also exposes this complete JSON as Home Assistant attributes. No raw RF/hex dump or invented fields are added. Decoder fields that are absent from a telegram remain absent in JSON and unknown in their sensors. Some meter telegram variants do not carry every optional value.
+
+Absolute totals are published, so repeats never fabricate consumption increments. Invalid/nonfinite numbers are rejected; absent/null optional values are unknown, not zero. No `expire_after` is inferred from a short test. Historical volumes and backward volume have no statistical state class; Total water remains the cumulative water-usage sensor. The decoder's meter-local `target_datetime` is displayed unchanged as text because it has no timezone. No timezone or billing-period interpretation is invented for stored set-date values.
 
 Availability means the receiver is alive and connected to MQTT. It does not establish recent RF reception. Graceful shutdown/failure publishes offline with a bounded acknowledgement wait; abrupt loss relies on the retained last will and broker keepalive detection. Offline detection is not instantaneous during network/broker failure. Retained states deliberately remain historical until replaced. `received_at` is gateway receipt time in UTC, stamped once and unchanged on replay; original upstream timestamps remain separate. Runtime health includes last receipt and MQTT connection status at `/run/watermeter/health.json`; health success depends on live process identities/heartbeat, not reception age or broker connectivity.
 
-In Home Assistant, open Settings → Devices & services → MQTT, locate the Water/Diehl device and check all three sensors. Enable diagnostic Status if hidden/disabled. Verify Total water's `water` device class, `m³` unit and `total_increasing` state class, then select it under Energy → Water consumption. See [MQTT discovery](https://www.home-assistant.io/integrations/mqtt/), [MQTT sensor behavior](https://www.home-assistant.io/integrations/sensor.mqtt/) and [water usage](https://www.home-assistant.io/docs/energy/water/). Restart the gateway/HA and confirm stable entity identity and availability. Schema and subscriber checks do not by themselves prove the HA UI/statistics flow.
+In Home Assistant, open Settings → Devices & services → MQTT, locate the Water/Diehl device and check the ten sensors. Enable diagnostic sensors if hidden/disabled. Verify Total water's `water` device class, `m³` unit and `total_increasing` state class, then select it under Energy → Water consumption. See [MQTT discovery](https://www.home-assistant.io/integrations/mqtt/), [MQTT sensor behavior](https://www.home-assistant.io/integrations/sensor.mqtt/) and [water usage](https://www.home-assistant.io/docs/energy/water/). Restart the gateway/HA and confirm stable entity identity and availability. Schema and subscriber checks do not by themselves prove the HA UI/statistics flow.
 
 If Total water appears under MQTT but is missing from Energy's water selector, inspect its actual entity in Developer Tools → States (Settings → Tools → States in newer versions). It must have a numeric state, `device_class: water`, `state_class: total_increasing` and `unit_of_measurement: m³` with the superscript `³`. Then check Developer Tools → Statistics for that entity and any reported issue. Statistics update every five minutes; after initial discovery, allow a statistics cycle and reopen the Energy configuration. If it is still missing, check that Recorder is enabled and that its include/exclude filters allow this entity. Record the entity ID, state, attributes, Statistics result and Home Assistant version before changing discovery or creating another sensor. See the official [missing-entity checklist](https://www.home-assistant.io/docs/energy/faq/#troubleshooting-missing-entities), [statistics behavior](https://developers.home-assistant.io/docs/core/entity/sensor/#available-state-classes) and [Recorder filters](https://www.home-assistant.io/integrations/recorder/#configure-filter).
 
@@ -276,15 +294,14 @@ docker run --rm \
 
 Export the nonsecret broker variables first. For TLS, mount/pass the same TLS files/options as the reader. The observer uses a distinct client ID and publishes nothing. Old retained messages cannot satisfy its receipt-time requirement.
 
-To retire a device, stop its publisher first, then publish a **zero-length retained QoS 1 payload** to each of the exact three discovery topics listed above. Also clear the exact state/availability topics if retiring the device entirely. Use your broker UI or an authenticated client configured with a protected password file; never put a password in command arguments. For an anonymous broker, for example:
+To retire a device, stop its publisher first, then publish a **zero-length retained QoS 1 payload** to each of the exact ten discovery topics listed above. Also clear the exact state/availability topics if retiring the device entirely. Use your broker UI or an authenticated client configured with a protected password file; never put a password in command arguments. For an anonymous broker, for example (replace the dummy ID):
 
 ```bash
-mosquitto_pub -h "$MQTT_HOST" -p "${MQTT_PORT:-1883}" -q 1 -r -n \
-  -t homeassistant/sensor/diehl_hydrus_12345678_total_m3/config
-mosquitto_pub -h "$MQTT_HOST" -p "${MQTT_PORT:-1883}" -q 1 -r -n \
-  -t homeassistant/sensor/diehl_hydrus_12345678_flow_temperature_c/config
-mosquitto_pub -h "$MQTT_HOST" -p "${MQTT_PORT:-1883}" -q 1 -r -n \
-  -t homeassistant/sensor/diehl_hydrus_12345678_status/config
+for field in total_m3 flow_temperature_c status target_m3 target_datetime \
+  total_at_set_date_m3 set_date total_backward_m3 timestamp received_at; do
+  mosquitto_pub -h "$MQTT_HOST" -p "${MQTT_PORT:-1883}" -q 1 -r -n \
+    -t "homeassistant/sensor/diehl_hydrus_12345678_${field}/config"
+done
 mosquitto_pub -h "$MQTT_HOST" -p "${MQTT_PORT:-1883}" -q 1 -r -n -t watermeter/12345678/state
 mosquitto_pub -h "$MQTT_HOST" -p "${MQTT_PORT:-1883}" -q 1 -r -n -t watermeter/12345678/availability
 ```
@@ -345,8 +362,8 @@ Successful main pushes and scheduled builds automatically publish `latest` to GH
 To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Use a new version for subsequent releases. CI rejects malformed version tags and commits outside main's history. After passing the same tests, it publishes the version tag and creates a GitHub release with a build-free deployment archive pinned to the actual registry digest, pinned unmodified native source archives plus project build materials/runtime package versions, an image reference and `SHA256SUMS`. A version release does not move `latest`; that follows main. The package must be public in GitHub's package settings for anonymous pulls (package visibility is separate from repository visibility). Hosted results are recorded in [verification](docs/verification.md). arm64 is not claimed supported/tested.

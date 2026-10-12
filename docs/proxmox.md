@@ -12,10 +12,10 @@ In the node's shell, download the standalone script:
 curl -fLo install-proxmox.py \
   https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/scripts/install-proxmox.py
 python3 install-proxmox.py --check
-python3 install-proxmox.py --release v0.2.0
+python3 install-proxmox.py --release v0.3.0
 ```
 
-`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The installer is currently distributed from the source repository; v0.2.0 supplies the existing tested application image. Future deployment archives also include the standalone installer under `scripts/`.
+`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.3.0 deployment archive also includes this standalone installer under `scripts/`. Version v0.3.0 includes full decoded-data discovery and meter-ID suffixes on sensor names, plus the Proxmox extraction permission fix.
 
 The installer prompts for:
 

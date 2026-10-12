@@ -9,12 +9,14 @@ class DiscoveryTests(unittest.TestCase):
     def test_contract_and_stability(self):
         settings = Settings()
         configs = {topic: json.loads(payload) for topic, payload in messages(settings)}
-        self.assertEqual(len(configs), 3)
+        self.assertEqual(len(configs), 10)
         for topic, config in configs.items():
             self.assertEqual(topic, f"homeassistant/sensor/{config['unique_id']}/config")
             self.assertEqual(config['device']['identifiers'], ['diehl_hydrus_12345678'])
             self.assertEqual(config['state_topic'], 'watermeter/12345678/state')
             self.assertEqual(config['availability_topic'], 'watermeter/12345678/availability')
+            self.assertTrue(config['name'].endswith(' 12345678'))
+            self.assertTrue(config['default_entity_id'].endswith('_12345678'))
             self.assertNotIn('expire_after', config)
             self.assertIn('.get(', config['value_template'])
             self.assertNotIn('float(0)', config['value_template'])
@@ -25,3 +27,25 @@ class DiscoveryTests(unittest.TestCase):
         status = next(c for c in configs.values() if c['unique_id'].endswith('_status'))
         self.assertEqual(status['entity_category'], 'diagnostic')
         self.assertNotIn('state_class', status)
+        self.assertEqual(status['json_attributes_topic'], settings.state_topic)
+
+    def test_all_decoder_fields_and_timestamps_have_safe_semantics(self):
+        configs = {json.loads(payload)['unique_id']: json.loads(payload)
+                   for _, payload in messages(Settings())}
+        fields = {'total_m3', 'flow_temperature_c', 'status', 'target_m3', 'target_datetime',
+                  'total_at_set_date_m3', 'set_date', 'total_backward_m3', 'timestamp', 'received_at'}
+        self.assertEqual(set(configs), {'diehl_hydrus_12345678_' + f for f in fields})
+        for field in ('target_m3', 'total_at_set_date_m3', 'total_backward_m3'):
+            self.assertNotIn('state_class', configs['diehl_hydrus_12345678_' + field])
+        local_date = configs['diehl_hydrus_12345678_target_datetime']
+        self.assertNotIn('device_class', local_date)
+        self.assertNotIn('as_datetime', local_date['value_template'])
+        self.assertEqual(configs['diehl_hydrus_12345678_set_date']['device_class'], 'date')
+        self.assertEqual(configs['diehl_hydrus_12345678_received_at']['device_class'], 'timestamp')
+
+    def test_meter_suffix_preserves_leading_zeros_and_existing_identity(self):
+        configs = [json.loads(payload) for _, payload in messages(replace(Settings(), meter_id='00123456'))]
+        self.assertEqual(configs[0]['name'], 'Total water 00123456')
+        self.assertEqual(configs[0]['default_entity_id'], 'sensor.diehl_hydrus_total_m3_00123456')
+        self.assertEqual(configs[0]['unique_id'], 'diehl_hydrus_00123456_total_m3')
+        self.assertTrue(all(c['name'].endswith(' 00123456') for c in configs))
