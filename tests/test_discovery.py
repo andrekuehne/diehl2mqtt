@@ -9,7 +9,7 @@ class DiscoveryTests(unittest.TestCase):
     def test_contract_and_stability(self):
         settings = Settings()
         configs = {topic: json.loads(payload) for topic, payload in messages(settings)}
-        self.assertEqual(len(configs), 10)
+        self.assertEqual(len(configs), 11)
         for topic, config in configs.items():
             self.assertEqual(topic, f"homeassistant/sensor/{config['unique_id']}/config")
             self.assertEqual(config['device']['identifiers'], ['diehl_hydrus_12345678'])
@@ -34,7 +34,7 @@ class DiscoveryTests(unittest.TestCase):
         configs = {json.loads(payload)['unique_id']: json.loads(payload)
                    for _, payload in messages(Settings())}
         fields = {'total_m3', 'flow_temperature_c', 'status', 'target_m3', 'target_datetime',
-                  'total_at_set_date_m3', 'set_date', 'total_backward_m3', 'timestamp', 'received_at'}
+                  'total_at_set_date_m3', 'set_date', 'total_backward_m3', 'timestamp', 'received_at', 'rssi_dbm'}
         self.assertEqual(set(configs), {'diehl_hydrus_12345678_' + f for f in fields})
         for field in ('target_m3', 'total_at_set_date_m3', 'total_backward_m3'):
             self.assertNotIn('state_class', configs['diehl_hydrus_12345678_' + field])
@@ -43,6 +43,13 @@ class DiscoveryTests(unittest.TestCase):
         self.assertNotIn('as_datetime', local_date['value_template'])
         self.assertEqual(configs['diehl_hydrus_12345678_set_date']['device_class'], 'date')
         self.assertEqual(configs['diehl_hydrus_12345678_received_at']['device_class'], 'timestamp')
+        signal = configs['diehl_hydrus_12345678_rssi_dbm']
+        self.assertEqual(signal['name'], 'Signal strength')
+        self.assertEqual(signal['entity_category'], 'diagnostic')
+        self.assertEqual(signal['state_class'], 'measurement')
+        self.assertNotIn('unit_of_measurement', signal)
+        self.assertNotIn('device_class', signal)
+        self.assertIn("else 'unknown'", signal['value_template'])
 
     def test_device_name_preserves_leading_zeros_and_existing_identity(self):
         configs = [json.loads(payload) for _, payload in messages(replace(Settings(), meter_id='00123456'))]

@@ -112,6 +112,7 @@ class ReadingTests(unittest.TestCase):
                        {"total_m3": None}, {"total_m3": True}, {"total_m3": -1},
                        {"total_m3": "0.2"}, {"total_m3": float("nan")},
                        {"target_m3": float("inf")}, {"flow_temperature_c": "warm"},
+                       {"rssi_dbm": True}, {"rssi_dbm": "strong"}, {"rssi_dbm": float("nan")},
                        {"key": "disallowed"}):
             with self.subTest(change=change), self.assertRaises(InvalidReading):
                 accept(json.dumps(self.reading | change), Settings())

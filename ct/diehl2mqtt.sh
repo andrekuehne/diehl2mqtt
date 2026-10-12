@@ -2,8 +2,8 @@
 # One-line Proxmox launcher. The standalone installer owns all host changes.
 set -Eeuo pipefail
 umask 077
-INSTALLER_RELEASE=v0.7.1
-INSTALLER_SHA256=2173d884b7620f98a1d651f07ef0558166e23731cc89bb6c066a1ad68c17273a
+INSTALLER_RELEASE=v0.7.2
+INSTALLER_SHA256=3ebd6eaea2000e91f0c63c5f60bbd25ecb046ad8f246efea27155e58d299cb53
 
 for binary in curl python3 sha256sum mktemp pct pveversion; do
     if ! command -v "$binary" >/dev/null 2>&1; then

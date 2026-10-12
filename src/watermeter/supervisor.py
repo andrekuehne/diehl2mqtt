@@ -21,7 +21,11 @@ def log(message):
 
 class Supervisor:
     def __init__(self, settings, env, config, root, publisher=None, commands=None):
-        self.settings, self.env, self.config, self.root = settings, env, config, Path(root)
+        self.settings, self.config, self.root = settings, config, Path(root)
+        # rtl_wmbus formats local time without an offset; wmbusmeters parses
+        # that timestamp as UTC. UTC0 works without a tzdata installation and
+        # overrides both inherited TZ and HA's mounted local timezone.
+        self.env = dict(env, TZ="UTC0")
         self.publisher = publisher
         demodulator = ["rtl_wmbus", "-f", "-p", "S"]
         if settings.fast_math:
@@ -77,7 +81,7 @@ class Supervisor:
         # Decode only the known libusb status codes, never arbitrary upstream text.
         usb_errors = {-1: "USB I/O error", -2: "invalid USB parameter",
                       -3: "USB access denied (permissions or security policy)",
-                      -4: "USB device disconnected", -5: "USB device not found",
+                      -4: "USB device disconnected", -5: "USB device or interface not found",
                       -6: "USB device busy (another reader or kernel driver)",
                       -7: "USB transfer timed out", -8: "USB transfer overflow",
                       -9: "USB pipe error", -10: "USB operation interrupted",

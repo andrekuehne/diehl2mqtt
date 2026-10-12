@@ -167,6 +167,7 @@ class MQTTIntegrationTests(unittest.TestCase):
         raw = json.loads(Path("tests/fixtures/reading.json").read_text()) | {
             "total_backward_m3": 0.012, "total_at_set_date_m3": 0.15,
             "set_date": "2025-12-31", "timestamp": "2026-10-12T12:00:00Z",
+            "rssi_dbm": 133,
             "extra_decoder_data": {"counter": 7, "flags": ["OK"]},
         }
         accepted = accept(encode(raw), p.settings)
@@ -181,6 +182,12 @@ class MQTTIntegrationTests(unittest.TestCase):
         retained = late.records_for(p.settings.state_topic)[-1]
         self.assertTrue(retained[2])
         self.assertEqual(json.loads(retained[1]), accepted)
+        signal_topic = p.settings.discovery_prefix + "/sensor/diehl_hydrus_12345678_rssi_dbm/config"
+        wait_for(lambda: late.records_for(signal_topic))
+        signal = json.loads(late.records_for(signal_topic)[-1][1])
+        self.assertEqual(signal["name"], "Signal strength")
+        self.assertNotIn("unit_of_measurement", signal)
+        self.assertNotIn("device_class", signal)
         s.client.publish(p.settings.status_topic, "online", qos=1).wait_for_publish(3)
         wait_for(lambda: len(s.records_for(p.settings.state_topic)) >= 2)
         self.assertEqual(json.loads(s.records_for(p.settings.state_topic)[-1][1]), accepted)

@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 import os
 from pathlib import Path
 import signal
@@ -14,6 +15,33 @@ from watermeter.supervisor import Supervisor
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_pipeline_overrides_berlin_timezone_in_summer_and_winter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # POSIX timezone rules reproduce Berlin without relying on tzdata.
+            berlin = "CET-1CEST,M3.5.0,M10.5.0/3"
+            with patch.dict(os.environ, {"TZ": berlin}):
+                process = self.launch(root, "timezone")
+                try:
+                    deadline = time.monotonic() + 4
+                    while (len(list(root.glob("*.timezone"))) < 3 or
+                           not (root / "last_received_at").exists()) and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertEqual(len(list(root.glob("*.timezone"))), 3)
+                    for path in root.glob("*.timezone"):
+                        self.assertEqual(json.loads(path.read_text()),
+                                         {"tz": "UTC0", "winter": "12:00", "summer": "12:00"})
+                    self.assertEqual(os.environ["TZ"], berlin)
+                finally:
+                    process.send_signal(signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=8)
+            self.assertEqual(process.returncode, 0, stderr)
+            reading = json.loads(stdout)
+            timestamp = datetime.fromisoformat(reading["timestamp"].replace("Z", "+00:00"))
+            received = datetime.fromisoformat(reading["received_at"].replace("Z", "+00:00"))
+            self.assertLess(abs((received - timestamp).total_seconds()), 2)
+            self.no_children(root)
+
     def test_usb_diagnostics_keep_errors_without_upstream_secrets(self):
         supervisor = Supervisor(Settings(), {}, "/unused", "/unused")
         with patch("watermeter.supervisor.log") as output:

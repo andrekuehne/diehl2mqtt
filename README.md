@@ -32,7 +32,7 @@ Run this as root in the **Proxmox node shell**:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)"
 ```
 
-This installs the current **v0.7.1** release. Connect the RTL-SDR to that Proxmox node first. Run the command on the node itself, not on your desktop or inside another guest.
+This installs the current **v0.7.2** release. Connect the RTL-SDR to that Proxmox node first. Run the command on the node itself, not on your desktop or inside another guest.
 
 The setup offers Default/Advanced settings, dialog inputs and hidden secret fields. Default allocation is **1 CPU, 512 MiB RAM and 2 GiB disk**, with DHCP on `vmbr0`. **256 MiB RAM is a reasonable smaller allocation** based on a simulated runtime/update-staging check (about 73 MiB running, 105 MiB peak); actual reception on your node still needs verification. Choose Advanced to set RAM to 256 MiB and customize disk/networking, or supply the allocation directly:
 
@@ -69,16 +69,16 @@ docker version
 docker compose version
 ```
 
-Download, verify and unpack the current **v0.7.1** release into a new directory (see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for later versions):
+Download, verify and unpack the current **v0.7.2** release into a new directory (see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for later versions):
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.7.1/diehl2mqtt-v0.7.1-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.7.1/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.7.2/diehl2mqtt-v0.7.2-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.7.2/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.7.1-deploy.tar.gz
-cd diehl2mqtt-v0.7.1
+tar -xzf diehl2mqtt-v0.7.2-deploy.tar.gz
+cd diehl2mqtt-v0.7.2
 cp .env.example .env
 chmod 600 .env
 nano .env
@@ -117,7 +117,7 @@ docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml lo
 
 No registry login or local build is needed. Stop following logs with Ctrl+C; the container keeps running. Use the same Compose file list with `down` to stop/remove it. For anonymous MQTT omit the auth override and password setup; for JSON-only use just the base file and AES key. If Home Assistant Recorder has an include whitelist, include Total water before adding it to Energy.
 
-The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.7.1`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration. Docker upgrades use a new release's image digest and `pull`/`up`; the LXC's `update` command is for native LXC installations only.
+The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.7.2`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration. Docker upgrades use a new release's image digest and `pull`/`up`; the LXC's `update` command is for native LXC installations only.
 
 ### Deploy from a source checkout
 
@@ -343,9 +343,10 @@ homeassistant/sensor/diehl_hydrus_12345678_set_date/config
 homeassistant/sensor/diehl_hydrus_12345678_total_backward_m3/config
 homeassistant/sensor/diehl_hydrus_12345678_timestamp/config
 homeassistant/sensor/diehl_hydrus_12345678_received_at/config
+homeassistant/sensor/diehl_hydrus_12345678_rssi_dbm/config
 ```
 
-And **subscribe** to `homeassistant/status`. Adjust exact paths for configured prefixes/ID/status topic. A separate observation client additionally needs read access to these twelve device topics. No broad wildcard publish permission is needed. Broker ACLs written for v0.2.0's three discovery topics need the seven additional exact discovery topics above.
+And **subscribe** to `homeassistant/status`. Adjust exact paths for configured prefixes/ID/status topic. A separate observation client additionally needs read access to these thirteen device topics. No broad wildcard publish permission is needed. Broker ACLs written for v0.2.0's three discovery topics need the eight additional exact discovery topics above. When upgrading from ten sensors, permit the new `_rssi_dbm/config` discovery topic.
 
 The shared device is Diehl Metering / HYDRUS 2.0 / DME173 with identifier `diehl_hydrus_12345678`. Discovery creates:
 
@@ -363,10 +364,15 @@ The discovered device is named `Diehl Hydrus 2.0 ID 12345678` using your configu
 | Backward water | `_total_backward_m3` | m³ | water | — |
 | Decoder timestamp (diagnostic) | `_timestamp` | — | timestamp | — |
 | Last received (diagnostic) | `_received_at` | — | timestamp | — |
+| Signal strength (diagnostic, relative) | `_rssi_dbm` | — | — | measurement |
 
 Sensor display names omit the meter ID; the shared device name contains it. Newly discovered entities place the meter ID immediately after `diehl_hydrus`, for example `sensor.diehl_hydrus_12345678_total_m3`; leading zeros are preserved. Existing unique IDs and discovery topics are unchanged, so upgrades update the same entities. Home Assistant preserves an existing entity ID or user-customized name: rename an older entity in its entity settings without deleting it if you want the new ID format. The [MQTT sensor reference](https://www.home-assistant.io/integrations/sensor.mqtt/#default_entity_id) explains that the default entity ID is applied on first registration only.
 
 The retained state JSON contains **every field emitted by the pinned decoder**, including meter metadata, original timestamps and additional future fields, plus gateway `driver` and `received_at`. Status also exposes this complete JSON as Home Assistant attributes. No raw RF/hex dump or invented fields are added. Decoder fields that are absent from a telegram remain absent in JSON and unknown in their sensors. Some meter telegram variants do not carry every optional value.
+
+From v0.7.2, the shared receiver pipeline always uses UTC, independently of the host/HA timezone. `timestamp` marks radio reception and is emitted by the decoder with second precision; `received_at` is the gateway's acceptance time in UTC with milliseconds. Neither is a meter-reported measurement time. Home Assistant displays both in its configured local timezone: 20:47 UTC is 22:47 in Berlin summer time. This fixes the earlier local-time-as-UTC offset for new telegrams; previously recorded timestamps are not rewritten. Meter-local billing/set-date fields keep their existing semantics.
+
+Signal strength already travels in MQTT as `rssi_dbm`; v0.7.2 adds its Home Assistant sensor. Despite that upstream field name, the RTL-SDR pipeline supplies relative sample amplitude, **not calibrated dBm**. The sensor is unitless, with no signal-strength device class. Use it to compare reception with unchanged gain/settings; automatic gain can affect the value. An absent value stays unknown.
 
 Absolute totals are published, so repeats never fabricate consumption increments. Invalid/nonfinite numbers are rejected; absent/null optional values are unknown, not zero. No `expire_after` is inferred from a short test. Historical volumes and backward volume have no statistical state class; Total water remains the cumulative water-usage sensor. The decoder's meter-local `target_datetime` is displayed unchanged as text because it has no timezone. No timezone or billing-period interpretation is invented for stored set-date values.
 
@@ -456,8 +462,8 @@ Successful main pushes and scheduled builds automatically publish `latest` to GH
 To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
 
 ```bash
-git tag v0.7.1
-git push origin v0.7.1
+git tag v0.7.2
+git push origin v0.7.2
 ```
 
 When changing the installer release, update `DEFAULT_RELEASE` in `scripts/install-proxmox.py` and the release/SHA256 pins in `ct/diehl2mqtt.sh` together. Host tests enforce matching pins.

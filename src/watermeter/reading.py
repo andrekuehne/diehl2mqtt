@@ -35,7 +35,7 @@ def accept(line, settings):
         total = reading.get("total_m3")
         if type(total) not in (int, float) or total < 0:
             raise InvalidReading()
-        for field in ("flow_temperature_c", "target_m3", "total_backward_m3", "total_at_set_date_m3"):
+        for field in ("flow_temperature_c", "target_m3", "total_backward_m3", "total_at_set_date_m3", "rssi_dbm"):
             if reading.get(field) is not None and type(reading[field]) not in (int, float):
                 raise InvalidReading()
         if reading.get("status") is not None and not isinstance(reading["status"], str):

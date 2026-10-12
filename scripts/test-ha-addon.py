@@ -19,6 +19,7 @@ import os, pathlib, sys, time
 root = pathlib.Path('/tmp/addon-smoke')
 name = pathlib.Path(sys.argv[0]).name
 assert not any(k in os.environ for k in ('SUPERVISOR_TOKEN', 'METER_AES_KEY', 'MQTT_PASSWORD'))
+assert os.environ['TZ'] == 'UTC0'
 if name == 'rtl_sdr':
     marker = root / 'first-start'
     if not marker.exists():
@@ -26,7 +27,7 @@ if name == 'rtl_sdr':
         time.sleep(0.5)
         sys.exit(1)
 if name == 'wmbusmeters':
-    print('{"_":"telegram","meter":"dme173","id":"00123456","total_m3":1.2}', flush=True)
+    print('{"_":"telegram","meter":"dme173","id":"00123456","total_m3":1.2,"rssi_dbm":133}', flush=True)
 if name == 'rtl_wmbus':
     assert sys.argv[1:] == ['-f', '-p', 'S', '-a', '-t', '0']
 while True:
@@ -41,7 +42,8 @@ data.mkdir(exist_ok=True)
 (data / 'options.json').write_text(json.dumps(dict(
     meter_id='00123456', aes_key='00112233445566778899aabbccddeeff',
     mqtt_auto=False, mqtt_host='127.0.0.1', mqtt_port=9, fast_math=True, algorithm='runlength')))
-env = dict(os.environ, PATH=str(bin_dir) + ':' + os.environ['PATH'], SUPERVISOR_TOKEN='synthetic-token')
+env = dict(os.environ, PATH=str(bin_dir) + ':' + os.environ['PATH'], SUPERVISOR_TOKEN='synthetic-token',
+           TZ='CET-1CEST,M3.5.0,M10.5.0/3')
 out = root / 'stdout'
 err = root / 'stderr'
 with out.open('w') as stdout, err.open('w') as stderr:
@@ -65,6 +67,7 @@ with out.open('w') as stdout, err.open('w') as stderr:
             assert response.status == 200
         reading = json.loads(out.read_text().splitlines()[-1])
         assert reading['id'] == '00123456' and reading['total_m3'] == 1.2
+        assert reading['rssi_dbm'] == 133
         assert '/tmp/watermeter' in str(next(Path('/tmp/watermeter').glob('decoder-*')))
         child.send_signal(signal.SIGTERM)
         assert child.wait(timeout=12) == 0

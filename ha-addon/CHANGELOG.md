@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2
+
+- Run the shared SDR/decoder pipeline in UTC, fixing decoder timestamps shifted by the host/HA timezone. HA continues displaying timestamps in its configured local timezone.
+- Discover Signal strength as an eleventh, unitless diagnostic sensor. The existing MQTT `rssi_dbm` field is relative RTL-SDR amplitude, not calibrated dBm.
+- Clarify that USB error -5 can indicate a missing interface as well as a missing device.
+
 ## 0.7.1
 
 - Report specific USB access, busy, disconnect, kernel detach and transfer errors without printing upstream secrets or telegrams.

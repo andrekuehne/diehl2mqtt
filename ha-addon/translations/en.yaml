@@ -52,7 +52,7 @@ configuration:
     description: Leave blank for watermeter_<meter ID>. Never run two publishers with the same identity.
   ha_discovery:
     name: Home Assistant discovery
-    description: Automatically discover all ten measurement and diagnostic sensors.
+    description: Automatically discover all eleven measurement and diagnostic sensors.
   ha_discovery_prefix:
     name: Home Assistant discovery prefix
     description: Normally homeassistant; keep unchanged when migrating from Docker or LXC.

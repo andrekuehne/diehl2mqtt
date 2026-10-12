@@ -31,6 +31,15 @@ if role == "decoder" and mode == "eof":
 if role == "decoder" and mode in ("readings", "broker-outage"):
     print("not json", flush=True)
     print(json.dumps({"_": "telegram", "meter": "dme173", "id": "12345678", "total_m3": 1.2}), flush=True)
+if mode == "timezone":
+    (root / (role + ".timezone")).write_text(json.dumps({
+        "tz": os.environ.get("TZ"),
+        "winter": time.strftime("%H:%M", time.localtime(1767268800)),
+        "summer": time.strftime("%H:%M", time.localtime(1782907200)),
+    }))
+    if role == "decoder":
+        print(json.dumps({"_": "telegram", "meter": "dme173", "id": "12345678", "total_m3": 1.2,
+                          "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.localtime())}), flush=True)
 if role == "decoder" and mode == "oversized":
     print("x" * 80000, end="", flush=True)
 while True:

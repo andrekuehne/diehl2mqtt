@@ -1,6 +1,6 @@
 # Diehl Hydrus to MQTT
 
-Read a Diehl HYDRUS 2.0 / DME173 meter with an RTL-SDR, decrypt C1 telegrams and publish the complete decoded data to MQTT. Includes automatic discovery of all ten existing Home Assistant sensors.
+Read a Diehl HYDRUS 2.0 / DME173 meter with an RTL-SDR, decrypt C1 telegrams and publish the complete decoded data to MQTT. Includes automatic discovery of all eleven Home Assistant sensors.
 
 Requires Home Assistant OS on amd64 with the RTL-SDR connected or passed through to its VM.
 

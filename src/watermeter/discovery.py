@@ -15,6 +15,8 @@ SENSORS = (
     ("total_backward_m3", "Backward water", {"unit_of_measurement": "m³", "device_class": "water"}),
     ("timestamp", "Decoder timestamp", {"device_class": "timestamp", "entity_category": "diagnostic"}),
     ("received_at", "Last received", {"device_class": "timestamp", "entity_category": "diagnostic"}),
+    # rtl_wmbus supplies raw amplitude, despite wmbusmeters' rssi_dbm label.
+    ("rssi_dbm", "Signal strength", {"icon": "mdi:signal", "state_class": "measurement", "entity_category": "diagnostic"}),
 )
 
 

@@ -1,8 +1,12 @@
 # Verification record
 
+## UTC timestamps and relative signal strength (v0.7.2)
+
+The shared receiver supervisor now forces `TZ=UTC0` for all three pipeline children, overriding the HA/host local timezone without requiring tzdata. Regression checks run real subprocesses under inherited Berlin-style POSIX timezone rules, verify UTC in both summer and winter, and compare decoder/gateway timestamps. The actual pinned wmbusmeters binary decrypts the public synthetic fixture in RTL-WMBus input format and preserves UTC reception timestamps and raw signal strength. An isolated real MQTT broker verifies the raw field survives retained state and birth replay, and the eleventh discovery config advertises a unitless diagnostic measurement. All 52 application tests, 32 Proxmox host tests, manifest checks and actual add-on startup/recovery checks passed locally. Destination HA display of the new sensor and corrected future timestamps still needs owner confirmation. Production keys, meter identity, broker and RF captures were not used for these tests.
+
 ## Receiver failure diagnostics (v0.7.1)
 
-A destination HA OS VM enumerated the RTL-SDR but its add-on receiver pipeline exited. The original diagnostic filter obscured the cause; no specific USB cause or hardware fix has yet been confirmed on that VM. Diagnostics now classify known USB failures without relaying upstream text, handle split pipe messages and drain pending stderr before failure cleanup. Tests cover access denial, a busy device, disconnection, exit codes, deduplication and secret suppression. All 50 application tests and 32 Proxmox host tests passed locally. Destination verification requires the owner's updated add-on log.
+A destination HA OS VM enumerated the RTL-SDR but its add-on receiver pipeline exited. The original diagnostic filter obscured the cause. Diagnostics now classify known USB failures without relaying upstream text, handle split pipe messages and drain pending stderr before failure cleanup. Tests cover access denial, a busy device, disconnection, exit codes, deduplication and secret suppression. All 50 application tests and 32 Proxmox host tests passed locally. The owner's updated log identified USB interface claiming failure (-5); physically reconnecting the dongle restored reception, and the owner confirmed the add-on works. A stale state from earlier LXC passthrough is plausible but unconfirmed. Version 0.7.2 clarifies the -5 label to cover a missing interface as well as a missing device.
 
 ## Local implementation acceptance
 

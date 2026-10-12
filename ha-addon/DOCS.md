@@ -64,11 +64,15 @@ watermeter/<meter-id>/availability
 homeassistant/sensor/diehl_hydrus_<meter-id>_<field>/config
 ```
 
-Complete decoded JSON, QoS 1, retained state/discovery, online/offline availability, Home Assistant birth replay and all ten sensors work as before. An empty `mqtt_client_id` derives `watermeter_<meter ID>`. Run only one publisher for that meter; even different client IDs would still conflict on shared state/availability topics. Changing prefixes deliberately creates different topic paths.
+Complete decoded JSON, QoS 1, retained state/discovery, online/offline availability, Home Assistant birth replay and all eleven sensors work as before. An empty `mqtt_client_id` derives `watermeter_<meter ID>`. Run only one publisher for that meter; even different client IDs would still conflict on shared state/availability topics. Changing prefixes deliberately creates different topic paths.
+
+Version 0.7.2 adds **Signal strength**, a unitless diagnostic sensor. The upstream `rssi_dbm` JSON field contains relative RTL-SDR amplitude, not calibrated dBm; automatic gain affects comparisons. Missing values remain unknown. MQTT already includes this field; custom broker ACLs must also permit `homeassistant/sensor/diehl_hydrus_<meter-id>_rssi_dbm/config` (adjust your discovery prefix).
+
+The receiver pipeline uses UTC from 0.7.2. **Decoder timestamp** marks radio reception (seconds); **Last received** marks gateway acceptance (milliseconds). HA displays both in your configured timezone, so 20:47 UTC appears as 22:47 in Berlin summer time. This corrects the earlier local-time-as-UTC offset for future readings without changing HA's timezone or old history. Meter-local billing and set dates keep their existing interpretation.
 
 # Updates and troubleshooting
 
-Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.7.1` is the add-on image tag; `v0.7.1` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
+Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.7.2` is the add-on image tag; `v0.7.2` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
 
 The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
 

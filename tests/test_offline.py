@@ -3,6 +3,8 @@ from pathlib import Path
 import os
 import secrets
 import shutil
+import json
+import subprocess
 import tempfile
 import unittest
 from watermeter.offline import decode
@@ -11,6 +13,26 @@ from watermeter.settings import Settings, ConfigError
 
 @unittest.skipUnless(shutil.which("wmbusmeters"), "wmbusmeters not available")
 class OfflineTests(unittest.TestCase):
+    def test_rtlwmbus_metadata_keeps_utc_timestamp_and_raw_signal(self):
+        from watermeter.private import private_config
+        from watermeter.reading import accept
+        from watermeter.supervisor import Supervisor
+        packet = Path("tests/fixtures/dme173_12345678.hex").read_text().strip()
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings()
+            env = dict(os.environ, TZ="CET-1CEST,M3.5.0,M10.5.0/3")
+            with private_config(settings, "00112233445566778899aabbccddeeff", Path(tmp)) as config:
+                pipeline = Supervisor(settings, env, config, tmp)
+                for stamp in ("2026-01-01 12:00:00", "2026-07-01 12:00:00"):
+                    frame = f"C1;1;1;{stamp}.000000;133;0;12345678;0x{packet}\n"
+                    decoded = subprocess.run(pipeline.commands[2], input=frame, text=True,
+                                             capture_output=True, env=pipeline.env, timeout=10)
+                    self.assertEqual(decoded.returncode, 0)
+                    reading = accept(decoded.stdout.strip(), settings)
+                    self.assertEqual(reading["timestamp"], stamp.replace(" ", "T") + "Z")
+                    self.assertEqual(reading["rssi_dbm"], 133)
+                    self.assertEqual(reading["total_m3"], 0.252)
+
     def test_synthetic_fixture_decrypts_with_public_key(self):
         from dataclasses import replace
         with tempfile.TemporaryDirectory() as tmp:
