@@ -160,12 +160,12 @@ class Supervisor:
                 signal.signal(sig, handler)
 
 
-def run(settings, key, password, env):
+def run(settings, key, password, env, root=Path("/run/watermeter")):
     versions = Path("/usr/share/watermeter/versions.txt")
     if versions.exists():
         for line in versions.read_text().splitlines():
             log(line)
-    root = Path("/run/watermeter")
+    root = Path(root)
     os.umask(0o077)
     with private_config(settings, key, root) as config:
         publisher = None

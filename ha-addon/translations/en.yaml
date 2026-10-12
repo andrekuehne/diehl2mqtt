@@ -1,0 +1,55 @@
+configuration:
+  meter_id:
+    name: Meter ID
+    description: Eight-digit Wireless M-Bus ID. Keep leading zeros; quote the ID in YAML.
+  aes_key:
+    name: Meter AES key
+    description: Your meter's 32 hexadecimal character AES key.
+  meter_name:
+    name: Decoder meter label
+    description: Label in decoded JSON. Home Assistant device naming uses the model and meter ID.
+  frequency:
+    name: Radio frequency
+    description: Wireless M-Bus frequency, normally 868.95M. DME173/C1 is fixed.
+  mqtt_auto:
+    name: Automatic MQTT configuration
+    description: Use the Supervisor MQTT service (normally the Mosquitto app). Disable for manual broker settings.
+  mqtt_host:
+    name: MQTT hostname
+    description: Manual mode only. Hostname or IP, without mqtt:// or a port suffix.
+  mqtt_port:
+    name: MQTT port
+    description: Manual mode only. Normally 1883, or 8883 with TLS.
+  mqtt_username:
+    name: MQTT username
+    description: Manual mode only. Leave blank for anonymous MQTT.
+  mqtt_password:
+    name: MQTT password
+    description: Manual mode only. Stored in add-on configuration like the AES key.
+  mqtt_tls:
+    name: MQTT TLS
+    description: Manual mode only. Enable verified TLS; system certificate authorities are trusted by default.
+  mqtt_ca_certificate:
+    name: MQTT CA certificate (PEM)
+    description: Optional custom CA PEM text for TLS. Use YAML block syntax for multiple lines.
+  mqtt_client_certificate:
+    name: MQTT client certificate (PEM)
+    description: Optional client certificate PEM for mutual TLS; requires its matching private key.
+  mqtt_client_key:
+    name: MQTT client private key (PEM)
+    description: Optional unencrypted client key PEM for mutual TLS; requires its matching certificate.
+  mqtt_topic_prefix:
+    name: MQTT topic prefix
+    description: Keep watermeter to preserve existing state and availability topics.
+  mqtt_client_id:
+    name: MQTT client ID
+    description: Leave blank for watermeter_<meter ID>. Never run two publishers with the same identity.
+  ha_discovery:
+    name: Home Assistant discovery
+    description: Automatically discover all ten measurement and diagnostic sensors.
+  ha_discovery_prefix:
+    name: Home Assistant discovery prefix
+    description: Normally homeassistant; keep unchanged when migrating from Docker or LXC.
+  ha_status_topic:
+    name: Home Assistant birth topic
+    description: Normally homeassistant/status; online messages trigger discovery and latest-state replay.

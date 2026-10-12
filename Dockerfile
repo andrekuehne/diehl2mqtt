@@ -66,5 +66,16 @@ ENV WATERMETER_TEST_MQTT=1
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
 
+# Home Assistant manages options, USB mapping, updates and the health watchdog.
+FROM runtime AS ha-addon
+ARG HA_ADDON_VERSION=0.6.0
+LABEL io.hass.version="${HA_ADDON_VERSION}" \
+      io.hass.type="addon" \
+      io.hass.arch="amd64" \
+      org.opencontainers.image.source="https://github.com/andrekuehne/diehl2mqtt"
+ENTRYPOINT ["/usr/bin/tini", "-g", "--", "python", "-m", "watermeter.addon"]
+CMD []
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 CMD ["python", "-c", "from watermeter.health import healthy; from pathlib import Path; raise SystemExit(0 if healthy(Path('/tmp/watermeter')) else 1)"]
+
 # Keep the default build target as the broker-free production image.
 FROM runtime AS final
