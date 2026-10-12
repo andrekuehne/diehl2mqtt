@@ -11,4 +11,4 @@ Requires Home Assistant OS on amd64 with the RTL-SDR connected or passed through
 3. In **Configuration**, enter your eight-digit meter ID, 32-hex-character AES key and MQTT settings. Automatic MQTT uses the Supervisor MQTT service; disable it for a manual broker.
 4. Save and start. Enable **Start on boot** and **Watchdog**, then check the Log and a fresh MQTT reading.
 
-Stop the previous reader before starting this one. Everything, including passwords and keys, is configured in the Configuration tab. See [Documentation](DOCS.md) for manual repository setup, USB passthrough, configuration and migration.
+The receiver needs exclusive access to its USB dongle. Everything, including passwords and keys, is configured in the Configuration tab. See [Documentation](DOCS.md) for manual repository setup, USB passthrough, configuration and troubleshooting. The app is currently experimental; keep protection mode enabled.

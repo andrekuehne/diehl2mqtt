@@ -1,23 +1,15 @@
 # Installation
 
-Requires Home Assistant OS on amd64 (for example your Proxmox HA VM) and a single supported RTL-SDR. arm64 is deferred. The app remains experimental while destination reboot, update and hardening checks continue.
+Requires Home Assistant OS on amd64 and a supported RTL-SDR. ARM64 is not currently supported. The app is experimental. The receiver needs exclusive access to the dongle.
 
 [![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fandrekuehne%2Fdiehl2mqtt)
 
-1. Stop any previous reader, including its automatic startup/monitoring. For our LXC, run on the **Proxmox node**, replacing `CTID`:
+1. Connect the RTL-SDR to the Home Assistant host. For a Proxmox VM, pass it through using **VM → Hardware → Add → USB Device**. The dongle must be visible inside the HA VM.
+2. Click the button, enter your local Home Assistant URL if prompted, and confirm **Add**. Alternatively, open **Settings → Apps** (older versions: **Add-ons**) → **App/Add-on store → ⋮ → Repositories** and add `https://github.com/andrekuehne/diehl2mqtt` manually.
+3. Install **Diehl Hydrus to MQTT**. Open **Configuration**, enter your meter ID and AES key, configure MQTT, and save.
+4. Start the app. Enable **Start on boot** and **Watchdog**. Check **Log**, then the MQTT device and a fresh **Last received** timestamp.
 
-   ```bash
-   systemctl disable --now diehl2mqtt-lxc@CTID.timer
-   systemctl stop diehl2mqtt-lxc@CTID.service
-   pct shutdown CTID
-   ```
-
-2. In Proxmox, pass the RTL-SDR through to the **Home Assistant VM** (VM → Hardware → Add → USB Device). Remove the old reader's competing USB assignment as appropriate. The HA VM must actually see the device; VM USB reattachment after reconnect is handled by Proxmox.
-3. Click the button above, enter your local Home Assistant URL if prompted, and confirm **Add** in the prefilled repository dialog. Alternatively, open **Settings → Apps** (older versions: **Add-ons**) → **App/Add-on store → ⋮ → Repositories** and add `https://github.com/andrekuehne/diehl2mqtt` manually.
-4. Install **Diehl Hydrus to MQTT**. Open **Configuration**, enter your own meter ID and AES key, configure MQTT, and save.
-5. Start the add-on. Enable **Start on boot** and **Watchdog**. Check **Log**, then the MQTT device and a fresh **Last received** timestamp.
-
-The device is `Diehl Hydrus 2.0 ID <meter ID>`. Sensor names are `Total water`, `Flow temperature`, etc. Entity IDs still include the ID, such as `sensor.diehl_hydrus_12345678_total_m3`. Do not delete existing entities when migrating: the same broker, meter ID and topic settings reuse the same discovery identities. Existing manual name overrides remain under your control. Recorder whitelists must include Total water for Energy statistics.
+The device is `Diehl Hydrus 2.0 ID <meter ID>`. Sensor names are `Total water`, `Flow temperature`, etc. Entity IDs include the ID, such as `sensor.diehl_hydrus_12345678_total_m3`. Keep the same broker, meter ID and topic settings to retain existing discovery identities. Existing manual name overrides remain under your control. Recorder whitelists must include Total water for Energy statistics.
 
 # Configuration
 
@@ -25,7 +17,7 @@ Everything is configured in the Configuration tab, including passwords and the A
 
 Required: `meter_id` is **text containing exactly eight digits**, preserving leading zeros. `aes_key` is exactly **32 hexadecimal characters**. There is no preset real ID or AES key. The driver and radio mode are fixed to `dme173` / C1, with default `frequency: 868.95M`. `meter_name` only labels the decoded JSON.
 
-**CPU tuning** (0.7.0+): `fast_math: true` enables approximate atan at runtime. `algorithm` selects `both` (default), `runlength`, or `time2`; a single algorithm reduces CPU and reception diversity. No recompilation is required. Defaults remain `fast_math: false` and `algorithm: both`, including when upgrading older options. Start with fast math and both algorithms, compare fresh readings/reception gaps, and revert if reception worsens. A short desktop test used about 11% of one core with fast math versus 19% with defaults; only two distinct telegrams were compared, so weak-signal behavior needs local verification. See [CPU measurements](https://github.com/andrekuehne/diehl2mqtt#reduce-sdr-cpu-use). Save and restart the add-on after changes; the startup log shows the selected options.
+**CPU tuning**: `fast_math: true` enables approximate atan at runtime. `algorithm` selects `both` (default), `runlength`, or `time2`; a single algorithm reduces CPU and reception diversity. No recompilation is required. Defaults are `fast_math: false` and `algorithm: both`. Start with fast math and both algorithms, compare fresh readings/reception gaps, and revert if reception worsens. See [CPU tuning](https://github.com/andrekuehne/diehl2mqtt#reduce-sdr-cpu-use). Save and restart the add-on after changes; the startup log shows the selected options.
 
 **Automatic MQTT** (`mqtt_auto: true`, default) uses the MQTT service registered with Supervisor, normally the Mosquitto add-on. Have the broker running before starting the reader. Its host, port, username/password and TLS flag replace the manual broker fields; topic/discovery options still apply. If no service is registered, use manual mode.
 
@@ -64,23 +56,21 @@ watermeter/<meter-id>/availability
 homeassistant/sensor/diehl_hydrus_<meter-id>_<field>/config
 ```
 
-Complete decoded JSON, QoS 1, retained state/discovery, online/offline availability, Home Assistant birth replay and all eleven sensors work as before. An empty `mqtt_client_id` derives `watermeter_<meter ID>`. Run only one publisher for that meter; even different client IDs would still conflict on shared state/availability topics. Changing prefixes deliberately creates different topic paths.
+The app publishes complete decoded JSON with QoS 1, retained state/discovery and online/offline availability. It replays discovery on Home Assistant startup and discovers eleven sensors. An empty `mqtt_client_id` derives `watermeter_<meter ID>`. Run only one publisher for that meter; even different client IDs would still conflict on shared state/availability topics. Changing prefixes deliberately creates different topic paths.
 
-Version 0.7.2 adds **Signal strength**, a unitless diagnostic sensor. The upstream `rssi_dbm` JSON field contains relative RTL-SDR amplitude, not calibrated dBm; automatic gain affects comparisons. Missing values remain unknown. MQTT already includes this field; custom broker ACLs must also permit `homeassistant/sensor/diehl_hydrus_<meter-id>_rssi_dbm/config` (adjust your discovery prefix).
+**Signal strength** is a unitless diagnostic sensor. The upstream `rssi_dbm` JSON field contains relative RTL-SDR amplitude, not calibrated dBm; automatic gain affects comparisons. Missing values remain unknown. MQTT already includes this field; custom broker ACLs must also permit `homeassistant/sensor/diehl_hydrus_<meter-id>_rssi_dbm/config` (adjust your discovery prefix).
 
-The receiver pipeline uses UTC from 0.7.2. **Decoder timestamp** marks radio reception (seconds); **Last received** marks gateway acceptance (milliseconds). HA displays both in your configured timezone, so 20:47 UTC appears as 22:47 in Berlin summer time. This corrects the earlier local-time-as-UTC offset for future readings without changing HA's timezone or old history. Meter-local billing and set dates keep their existing interpretation.
+The receiver pipeline uses UTC. **Decoder timestamp** marks radio reception (seconds); **Last received** marks gateway acceptance (milliseconds). HA displays both in your configured timezone, so 20:47 UTC appears as 22:47 in Berlin summer time. Meter-local billing and set dates keep their existing interpretation.
 
 # Updates and troubleshooting
 
 Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.8.1` is the app image tag; `v0.8.1` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
 
-The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. From 0.8.0, a custom enforced AppArmor profile restricts executables, writes and device paths. After a brief root bootstrap reads Configuration, the receiver runs as UID 10001/GID 0 with no Linux capabilities and privilege escalation disabled. GID 0 preserves standard HAOS USB group-write access across reconnects; host USB ownership/permissions are not changed. The expected HA security rating is 8/8 once the profile is installed. See [security policy and release signature verification](../SECURITY.md). No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
+The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. A custom enforced AppArmor profile restricts executables, writes and device paths. After a brief root bootstrap reads Configuration, the receiver runs as UID 10001/GID 0 with no Linux capabilities and privilege escalation disabled. GID 0 preserves standard HAOS USB group-write access across reconnects; host USB ownership/permissions are not changed. The expected HA security rating is 8/8 once the profile is installed. See [security policy and release signature verification](../SECURITY.md). No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
 
 - **No SDR / permission / claimed driver:** check Proxmox VM passthrough and the add-on Log. Only one program may use the dongle. If the guest's DVB driver claims it, inspect the HA OS host driver binding; do not disable protection mode or add broad privileges as a first step.
-- **Receiver exits but HA OS lists the dongle:** `lsusb` proves enumeration, not that the add-on can open and stream from it. Version 0.7.1 reports specific libusb errors and process exit codes: component 1 is `rtl_sdr`, 2 is `rtl_wmbus`, and 3 is `wmbusmeters`. Access denied (`-3`), a busy device (`-6`) and a disconnected device (`-4`) need different fixes. Paste these classified messages when reporting failures; raw decoder errors remain suppressed because they may contain keys or telegrams.
+- **Receiver exits but HA OS lists the dongle:** `lsusb` proves enumeration, not that the add-on can open and stream from it. The log reports specific libusb errors and process exit codes: component 1 is `rtl_sdr`, 2 is `rtl_wmbus`, and 3 is `wmbusmeters`. Access denied (`-3`), a busy device (`-6`) and a disconnected device (`-4`) need different fixes. Paste these classified messages when reporting failures; raw decoder errors remain suppressed because they may contain keys or telegrams.
 - **USB removed:** the receiver cleans up and retries every five seconds. Reconnect must make the device visible again to the HA VM, not just to Proxmox. Enable Watchdog to recover a hung pipeline.
-- **All sensors unavailable:** inspect MQTT reconnect/receiver diagnostics and verify no old Docker or LXC reader is still publishing.
+- **All sensors unavailable:** inspect MQTT reconnect/receiver diagnostics and check for another publisher using the same client ID or availability topic.
 - **Nothing discovered after deleting a device:** restart the add-on or publish `online` to `homeassistant/status` to replay discovery.
 - **Broker outage:** reception continues and the latest state is cached for replay on reconnect. Startup in automatic mode needs the Supervisor MQTT service to be available.
-
-The local/CI checks use synthetic meter data and an isolated broker. Actual HA OS installation, USB permissions, live decryption, VM reboot and physical USB reconnect require verification on your destination VM.

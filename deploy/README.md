@@ -1,8 +1,8 @@
 # Deploy diehl2mqtt (Linux amd64)
 
-Install Docker Engine with Compose, connect the RTL-SDR to this Linux host (or pass it through to your Linux VM), then extract this deployment archive. No source checkout or local image build is needed. arm64 is deferred.
+Install Docker Engine with Compose, connect the RTL-SDR to this Linux host (or pass it through to your Linux VM), then extract this deployment archive. No source checkout or local image build is needed. ARM64 is not currently supported.
 
-From v0.8.0, release checksums and image digests have Cosign signatures. See [security and signature verification](SECURITY.md) to authenticate the downloaded release materials before installing. Home Assistant app confinement is described there separately; this Docker deployment keeps its existing USB/runtime behavior.
+Release checksums and image digests have Cosign signatures. See [security and signature verification](SECURITY.md) to authenticate the downloaded release materials before installing. Home Assistant app confinement is described there separately; this Docker deployment keeps its existing USB/runtime behavior.
 
 From this directory:
 
@@ -25,8 +25,6 @@ MQTT_TLS=false
 
 `METER_ID` is the water meter's **eight-digit Wireless M-Bus ID**, not the SDR's USB serial/vendor/product ID. Preserve leading zeros, for example `00123456`. It is deliberately blank in the release's example settings and must be supplied. Keep `METER_DRIVER=dme173` and `WMBUS_MODE=c1`; the supported meter is Diehl HYDRUS 2.0 / DME173. The image is already pinned to this release's registry digest, so retain `WATERMETER_IMAGE`. Use a broker address reachable from Docker; `.local` mDNS may fail inside containers.
 
-All source defaults and test IDs are dummy examples. Use your own meter ID here; the synthetic fixture's public test key is never a production key.
-
 `setup-secret.sh` prompts for the AES key supplied for your meter: **exactly 32 hexadecimal characters** (16 bytes), without spaces or a `0x` prefix. Input is hidden and saved only to `secrets/meter_aes_key`. The password script similarly creates `secrets/mqtt_password`. The directory uses mode 0700 and files mode 0600; existing files are not overwritten. Compose mounts the key read-only at `/run/secrets/meter_aes_key` and supplies its path through `METER_AES_KEY_FILE`. Keep both secrets out of `.env`, command arguments, GitHub and the image. The ID itself belongs in `.env`.
 
 For authenticated MQTT and Home Assistant discovery:
@@ -41,11 +39,11 @@ For anonymous MQTT, omit `compose.mqtt.auth.yaml` and the password setup. For JS
 
 The default broker connection uses no TLS. For TLS configuration, USB permissions, Proxmox passthrough, health, cleanup and troubleshooting, see the full [project README](https://github.com/andrekuehne/diehl2mqtt#readme). The receiver needs exclusive access to the dongle. Run only one instance for this meter/MQTT client identity.
 
-MQTT publishes the complete decoded telegram as retained JSON. Home Assistant discovers ten sensors for current/stored readings, dates and diagnostics. Entity IDs place your meter ID immediately after `diehl_hydrus`, for example `sensor.diehl_hydrus_12345678_total_m3`. Status exposes the complete JSON as attributes. Optional values remain unknown when absent. Existing entity identities are preserved; Home Assistant only applies default entity IDs when first registering an entity.
+MQTT publishes the complete decoded telegram as retained JSON. Home Assistant discovers eleven sensors for current/stored readings, dates and diagnostics. Entity IDs place your meter ID immediately after `diehl_hydrus`, for example `sensor.diehl_hydrus_12345678_total_m3`. Status exposes the complete JSON as attributes. Optional values remain unknown when absent. Existing entity identities are preserved; Home Assistant only applies default entity IDs when first registering an entity.
 
 In Home Assistant, find the `Diehl Hydrus 2.0 ID <your meter ID>` device under MQTT. Sensor names omit the ID; entity IDs retain it. Total water uses `m³`, `water` and `total_increasing`. If your Recorder has an include whitelist, include this sensor before adding it under Energy → Water consumption. Check States and Statistics if it does not appear.
 
-To tune SDR CPU use in Docker (v0.7.0+), set `WMBUS_FAST_MATH=true` and `WMBUS_ALGORITHM=both` in `.env`, then recreate the container with the same Compose `up -d --wait` command. No compilation is needed. Defaults are `false` and `both`. The algorithm also accepts `runlength` or `time2` to run just one demodulation method. Approximate math and fewer algorithms may affect reception; compare fresh readings and gaps before keeping the change. Use the new release's Compose files as well as its image. See the [tuning guide](https://github.com/andrekuehne/diehl2mqtt#reduce-sdr-cpu-use).
+To tune SDR CPU use in Docker, set `WMBUS_FAST_MATH=true` and `WMBUS_ALGORITHM=both` in `.env`, then recreate the container with the same Compose `up -d --wait` command. No compilation is needed. Defaults are `false` and `both`. The algorithm also accepts `runlength` or `time2` to run just one demodulation method. Approximate math and fewer algorithms may affect reception; compare fresh readings and gaps before keeping the change. Use the new release's Compose files as well as its image. See the [tuning guide](https://github.com/andrekuehne/diehl2mqtt#reduce-sdr-cpu-use).
 
 For direct **Proxmox VE 9.1+ without Docker**, connect the SDR to the node and run this as root in the **Proxmox node shell**:
 
@@ -61,6 +59,6 @@ To stop:
 docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml down
 ```
 
-For upgrades, download the next release into a separate directory, copy your protected `secrets/` and nonsecret broker/meter settings into it, and retain the new release's `WATERMETER_IMAGE` digest. Stop the old deployment before starting the new one. Keep the previous directory and digest for rollback. Updates are intentional; CI never updates your host automatically.
+For upgrades, download the next release into a separate directory, copy your protected `secrets/` and nonsecret broker/meter settings into it, and retain the new release's `WATERMETER_IMAGE` digest. Stop the old deployment before starting the new one. Keep the previous directory and digest for rollback. Updates are applied manually.
 
 Each release also supplies checksums and pinned native source/build materials. The full verification record and license notices live in the source repository.
