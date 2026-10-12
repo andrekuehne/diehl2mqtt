@@ -51,8 +51,15 @@ All recorded times above are UTC; Berlin is UTC+02:00 on this date. First live o
 
 Remaining external checks:
 
-1. NOT RUN: owner-confirmed Home Assistant UI and Energy water-statistics selection, three entities/one device and restart stability. Actual retained discovery/config delivery is verified, but no HA UI access or confirmation has been received. README has exact manual steps.
+1. PARTIAL: owner confirms all three sensors appear in the MQTT integration. Total water is missing from the Energy water selector; statistics eligibility and HA restart stability remain unresolved. No direct HA UI/API access is available. See the follow-up evidence below.
 2. NOT RUN: hosted GitHub Actions/GHCR. There is no configured remote; local workflow validation and equivalent image tests pass. Add a remote and run trusted CI before claiming hosted results.
 3. NOT RUN: optional physical unplug/replug stress, nonroot/rootless Docker, arm64 and Proxmox VM/LXC passthrough. Mandatory Ubuntu physical C1/stop/restart/live production-MQTT acceptance is complete.
 
 Local operation: owner-provided AES/password files and nonsecret `.env.local` stay protected and ignored. The final authenticated reader is running; use the full `.env.local` plus three-file Compose command in README for logs, stop, restart or removal. No host module/udev/passthrough configuration was changed automatically. The owner installed Docker and granted Docker socket access during verification.
+
+## Home Assistant Energy follow-up
+
+- Owner reports all three sensors appear under MQTT, but Total water is absent from the Energy water selection list.
+- On 2026-10-12, a separate read-only subscriber rechecked all three exact retained discovery topics against the running implementation: all match. Total water advertises `device_class: water`, `state_class: total_increasing`, and `unit_of_measurement: m³`, matching the official Energy eligibility requirements.
+- The same subscriber received numeric `total_m3=3.257` with `received_at=2026-10-12T10:45:32.434Z` and `online` availability. The Compose reader remains healthy.
+- Pending evidence: actual HA entity ID/state/attributes, Statistics entry or error, and HA version. Broker metadata does not establish what HA has applied or what Recorder has stored. No discovery change or replacement entity is justified by the current evidence. README now includes the States/Statistics/Recorder troubleshooting sequence.
