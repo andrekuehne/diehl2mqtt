@@ -8,16 +8,16 @@ For **Proxmox VE 9.1+ without nested Docker**, use the interactive [direct LXC i
 
 For another Linux **amd64** host, install [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin and connect or pass through the RTL-SDR. arm64 is deferred. The deployment archive contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts.
 
-Download and unpack the release (this example installs `v0.4.0`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
+Download and unpack the release (this example installs `v0.4.1`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.4.0/diehl2mqtt-v0.4.0-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.4.0/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.4.1/diehl2mqtt-v0.4.1-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.4.1/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.4.0-deploy.tar.gz
-cd diehl2mqtt-v0.4.0
+tar -xzf diehl2mqtt-v0.4.1-deploy.tar.gz
+cd diehl2mqtt-v0.4.1
 cp .env.example .env
 ```
 
@@ -362,8 +362,8 @@ Successful main pushes and scheduled builds automatically publish `latest` to GH
 To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.4.1
+git push origin v0.4.1
 ```
 
 Use a new version for subsequent releases. CI rejects malformed version tags and commits outside main's history. After passing the same tests, it publishes the version tag and creates a GitHub release with a build-free deployment archive pinned to the actual registry digest, pinned unmodified native source archives plus project build materials/runtime package versions, an image reference, a native LXC application update bundle and `SHA256SUMS`. A version release does not move `latest`; that follows main. The package must be public in GitHub's package settings for anonymous pulls (package visibility is separate from repository visibility). Hosted results are recorded in [verification](docs/verification.md). arm64 is not claimed supported/tested.

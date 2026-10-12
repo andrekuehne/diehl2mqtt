@@ -23,7 +23,7 @@ import time
 import urllib.request
 import uuid
 
-DEFAULT_RELEASE = "v0.4.0"
+DEFAULT_RELEASE = "v0.4.1"
 REPOSITORY = "https://github.com/andrekuehne/diehl2mqtt"
 PVE_CONFIG = Path("/etc/pve/lxc")
 CONFIG_DIR = Path("/etc/diehl2mqtt-lxc")
@@ -427,7 +427,7 @@ def bootstrap_updates(rootfs, release, image, owner):
         path.symlink_to("/opt/diehl2mqtt/current/" + destination)
         os.chown(path, *owner, follow_symlinks=False)
     (target / "bin").mkdir()
-    for filename in ("wmbusmeters", "rtl_wmbus", "entrypoint.sh", "healthcheck.sh"):
+    for filename in ("wmbusmeters", "rtl_wmbus", "entrypoint.sh", "healthcheck.sh", "update"):
         path = rootfs / "usr/local/bin" / filename
         if path.is_symlink() or not path.is_file():
             raise InstallError("Unexpected native binary layout")

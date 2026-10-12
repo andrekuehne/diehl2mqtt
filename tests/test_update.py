@@ -169,4 +169,5 @@ class UpdateTests(unittest.TestCase):
              patch.object(update.urllib.request, 'urlopen', side_effect=lambda *a, **k: archive.open('rb')):
             name = update.stage('v0.5.0')
         self.assertTrue((update.release_path(name) / 'watermeter/watermeter/__main__.py').is_file())
+        self.assertTrue((update.release_path(name) / 'bin/update').is_file())
         self.assertEqual(update.current_name(), 'old')

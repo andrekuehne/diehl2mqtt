@@ -55,7 +55,7 @@ class InstallerTests(unittest.TestCase):
             (self.root / name).mkdir(parents=True, exist_ok=True)
         for filename in ('__init__.py', 'lxc.py', 'update.py', 'health.py'):
             (self.root / 'opt/watermeter/watermeter' / filename).write_text('# test')
-        for filename in ('wmbusmeters', 'rtl_wmbus', 'entrypoint.sh', 'healthcheck.sh'):
+        for filename in ('wmbusmeters', 'rtl_wmbus', 'entrypoint.sh', 'healthcheck.sh', 'update'):
             (self.root / 'usr/local/bin' / filename).write_text('test')
         secret = self.root / 'etc/diehl2mqtt/secrets/meter_aes_key'
         secret.write_text('synthetic-only')

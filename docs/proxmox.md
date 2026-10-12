@@ -12,10 +12,10 @@ In the node's shell, download the standalone script:
 curl -fLo install-proxmox.py \
   https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/scripts/install-proxmox.py
 python3 install-proxmox.py --check
-python3 install-proxmox.py --release v0.4.0
+python3 install-proxmox.py --release v0.4.1
 ```
 
-`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.4.0 deployment archive also includes this standalone installer under `scripts/`. Version v0.4.0 adds native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
+`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.4.1 deployment archive also includes this standalone installer under `scripts/`. Version v0.4.1 includes the clean guest-shell environment fix; v0.4.0 introduced native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
 
 The installer prompts for:
 
@@ -30,7 +30,7 @@ The installer prompts for:
 The default allocation is 1 core, 512 MiB RAM and a 2 GiB root disk. You can answer the allocation prompts or supply values directly:
 
 ```bash
-python3 install-proxmox.py --release v0.4.0 --memory 1024 --disk 8
+python3 install-proxmox.py --release v0.4.1 --memory 1024 --disk 8
 ```
 
 RAM accepts 256–65536 MiB and disk accepts 2–1024 GiB, subject to your node/storage capacity. A larger disk leaves more room for retained application releases. The script refuses to overwrite an existing VM/CT or managed configuration. Failed installations leave any newly created CT for inspection; they never delete a guest. A failure before completion may require inspecting/removing that incomplete CT explicitly before retrying with the same ID.
@@ -111,9 +111,11 @@ Then run **inside the guest**:
 update --check                  # Compare with the latest stable GitHub release
 update                          # Confirm and install that release
 update --status                 # Show installed version and validation result
-update --release v0.4.0          # Select a specific published release
+update --release v0.4.1          # Select a specific published release
 update --rollback               # Return to the previous successfully installed release
 ```
+
+For a guest created with the short-lived v0.4.0 installer, use `PYTHONPATH=/opt/watermeter update --release v0.4.1` for its first update. After `update --status` reports `complete`, run `ln -sfn /opt/diehl2mqtt/current/bin/update /usr/local/bin/update` once inside that guest. This adopts the corrected, versioned wrapper. New v0.4.1 installations already have it.
 
 `--yes` skips the update confirmation for intentional automation. Updating requires outbound HTTPS/DNS access to GitHub and its release-asset service. No GitHub account, token, Docker daemon or Proxmox host credentials are required in the guest.
 
