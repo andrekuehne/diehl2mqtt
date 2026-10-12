@@ -63,6 +63,7 @@ def configuration(options, token='', root=ROOT, service=mqtt_service):
     """Use data-only Settings validation; never place credentials in os.environ."""
     strings = {
         'meter_id': '', 'aes_key': '', 'meter_name': 'Water', 'frequency': '868.95M',
+        'algorithm': 'both',
         'mqtt_host': '', 'mqtt_username': '', 'mqtt_password': '',
         'mqtt_ca_certificate': '', 'mqtt_client_certificate': '', 'mqtt_client_key': '',
         'mqtt_topic_prefix': 'watermeter', 'mqtt_client_id': '',
@@ -74,7 +75,8 @@ def configuration(options, token='', root=ROOT, service=mqtt_service):
         if not isinstance(value, str):
             raise ConfigError(f'Configuration {name} must be text')
         values[name] = value
-    for name, default in (('mqtt_auto', True), ('mqtt_tls', False), ('ha_discovery', True)):
+    for name, default in (('mqtt_auto', True), ('mqtt_tls', False), ('ha_discovery', True),
+                          ('fast_math', False)):
         value = options.get(name, default)
         if type(value) is not bool:
             raise ConfigError(f'Configuration {name} must be a boolean')
@@ -90,6 +92,7 @@ def configuration(options, token='', root=ROOT, service=mqtt_service):
     env = {
         'METER_ID': values['meter_id'], 'METER_NAME': values['meter_name'],
         'WMBUS_FREQUENCY': values['frequency'], 'MQTT_ENABLED': 'true',
+        'WMBUS_FAST_MATH': str(values['fast_math']), 'WMBUS_ALGORITHM': values['algorithm'],
         'MQTT_HOST': values['mqtt_host'], 'MQTT_PORT': str(port),
         'MQTT_USERNAME': values['mqtt_username'], 'MQTT_TLS': str(values['mqtt_tls']),
         'MQTT_TOPIC_PREFIX': values['mqtt_topic_prefix'],

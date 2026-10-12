@@ -87,6 +87,8 @@ class Settings:
     discovery: bool = False
     discovery_prefix: str = "homeassistant"
     status_topic: str = "homeassistant/status"
+    fast_math: bool = False
+    algorithm: str = "both"
 
     @classmethod
     def load(cls, env=None, offline=False):
@@ -96,6 +98,11 @@ class Settings:
         name = text(env, "METER_NAME", "Water")
         frequency = text(env, "WMBUS_FREQUENCY", "868.95M")
         mode = text(env, "WMBUS_MODE", "c1")
+        fast_math = boolean(env, "WMBUS_FAST_MATH")
+        algorithm = text(env, "WMBUS_ALGORITHM", "both")
+        if algorithm not in ("both", "runlength", "time2"):
+            raise ConfigError("WMBUS_ALGORITHM must be both, runlength or time2")
+        receiver = dict(fast_math=fast_math, algorithm=algorithm)
         if not re.fullmatch(r"[0-9]{8}", meter_id):
             raise ConfigError("METER_ID must be an eight-character decimal string")
         if driver != "dme173" or mode != "c1":
@@ -107,7 +114,7 @@ class Settings:
             raise ConfigError("WMBUS_FREQUENCY must be between 863 and 870 MHz")
         enabled = False if offline else boolean(env, "MQTT_ENABLED")
         if not enabled:
-            return cls(meter_id, driver, name, frequency, mode, client_id=f"watermeter_{meter_id}")
+            return cls(meter_id, driver, name, frequency, mode, client_id=f"watermeter_{meter_id}", **receiver)
         host = text(env, "MQTT_HOST")
         if not host or any(c.isspace() for c in host) or "/" in host or "@" in host:
             raise ConfigError("MQTT_HOST is required and must be a hostname or IP address")
@@ -135,7 +142,7 @@ class Settings:
                    topic(env, "MQTT_TOPIC_PREFIX", "watermeter"), client_id,
                    boolean(env, "HA_DISCOVERY_ENABLED", True),
                    topic(env, "HA_DISCOVERY_PREFIX", "homeassistant"),
-                   topic(env, "HA_STATUS_TOPIC", "homeassistant/status", root=False))
+                   topic(env, "HA_STATUS_TOPIC", "homeassistant/status", root=False), **receiver)
 
     @property
     def state_topic(self):

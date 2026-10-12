@@ -115,10 +115,17 @@ class InstallerTests(unittest.TestCase):
     def test_image_environment_kept_and_overrides_not_duplicated(self):
         old = "lxc.environment.runtime: PATH=/opt/venv/bin:/usr/bin\n" \
               "lxc.environment.runtime: METER_ID=12345678\n" \
+              "lxc.environment.runtime: WMBUS_FAST_MATH=false\n" \
+              "lxc.environment.runtime: WMBUS_ALGORITHM=both\n" \
               "lxc.environment.runtime: PYTHONPATH=/opt/watermeter\n"
-        result = app.configure_text(old, {"METER_ID": "00123456", "METER_AES_KEY_FILE": "/etc/diehl2mqtt/secrets/meter_aes_key"})
+        result = app.configure_text(old, {"METER_ID": "00123456", "METER_AES_KEY_FILE": "/etc/diehl2mqtt/secrets/meter_aes_key",
+                                          "WMBUS_FAST_MATH": "true", "WMBUS_ALGORITHM": "time2"})
         self.assertEqual(result.count("METER_ID="), 1)
         self.assertIn("METER_ID=00123456", result)
+        self.assertEqual(result.count("WMBUS_FAST_MATH="), 1)
+        self.assertEqual(result.count("WMBUS_ALGORITHM="), 1)
+        self.assertIn("WMBUS_FAST_MATH=true", result)
+        self.assertIn("WMBUS_ALGORITHM=time2", result)
         self.assertIn("PATH=/opt/venv/bin:/usr/bin", result)
         self.assertIn("tmpfs run/watermeter tmpfs nosuid,nodev,mode=0700,create=dir", result)
         self.assertNotIn("METER_AES_KEY=", result)

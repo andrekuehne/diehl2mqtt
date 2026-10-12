@@ -31,10 +31,10 @@ For a downloadable standalone installer or a read-only preflight check:
 curl -fLo install-proxmox.py \
   https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/scripts/install-proxmox.py
 python3 install-proxmox.py --check
-python3 install-proxmox.py --release v0.6.0
+python3 install-proxmox.py --release v0.7.0
 ```
 
-`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.6.0 deployment archive also includes this standalone installer under `scripts/`. Version v0.5.1 names the discovered device `Diehl Hydrus 2.0 ID <meter ID>` and omits the ID from sensor display names, while preserving entity IDs. Version v0.5.0 adds the one-line launcher and dialog setup, including the v0.4.1 clean guest-shell environment fix. Version v0.4.0 introduced native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
+`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.7.0 deployment archive also includes this standalone installer under `scripts/`. Version v0.5.1 names the discovered device `Diehl Hydrus 2.0 ID <meter ID>` and omits the ID from sensor display names, while preserving entity IDs. Version v0.5.0 adds the one-line launcher and dialog setup, including the v0.4.1 clean guest-shell environment fix. Version v0.4.0 introduced native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
 
 The installer prompts for:
 
@@ -43,13 +43,14 @@ The installer prompts for:
 - Linux bridge (default `vmbr0`), optional VLAN and DHCP or static IPv4 settings.
 - The connected SDR's USB port.
 - Your **eight-digit Wireless M-Bus meter ID**, preserving leading zeros. There is no default owner ID.
+- In Advanced/plain setup, fast demodulator math and algorithm selection (defaults: off / both).
 - MQTT mode: authenticated, anonymous, or off; broker address, port, TLS and username as applicable.
 - After showing the plan and confirming creation, the **32-character hexadecimal AES key** and, for authenticated MQTT, password, both with hidden input.
 
 The default allocation is 1 core, 512 MiB RAM and a 2 GiB root disk. You can answer the allocation prompts or supply values directly:
 
 ```bash
-python3 install-proxmox.py --release v0.6.0 --memory 1024 --disk 8
+python3 install-proxmox.py --release v0.7.0 --memory 1024 --disk 8
 ```
 
 RAM accepts 256–65536 MiB and disk accepts 2–1024 GiB, subject to your node/storage capacity. A larger disk leaves more room for retained application releases. The script refuses to overwrite an existing VM/CT or managed configuration. Failed installations leave any newly created CT for inspection; they never delete a guest. A failure before completion may require inspecting/removing that incomplete CT explicitly before retrying with the same ID.
@@ -61,6 +62,32 @@ If an older installer failed while canonicalizing `/var/lib/lxc/CTID/rootfs` wit
 AES/MQTT secrets are written directly into `/etc/diehl2mqtt/secrets/` in the new guest: directory mode 0700, file mode 0600, owned by its mapped root UID/GID. They do not appear in command arguments, host-monitor configuration or image layers. Decoder-generated secret files live in a dedicated `/run/watermeter` tmpfs. CT backups **include the secret files** and must be protected accordingly.
 
 The installer enables Home Assistant discovery through the existing MQTT defaults. Publicly trusted TLS uses the image's system CA store. Custom CA/client certificates and mTLS are not interactive installer options; configure those separately if required. Prefer a broker IP or DNS name reachable from the guest; `.local` mDNS may not resolve there.
+
+## Demodulator tuning
+
+Version v0.7.0 adds runtime `WMBUS_FAST_MATH` (`false` / `true`) and `WMBUS_ALGORITHM` (`both` / `runlength` / `time2`). They require no compilation. Accurate math and both algorithms remain the defaults. Fast math reduces CPU with approximate atan; selecting one algorithm reduces reception diversity. Start with fast math and both algorithms, then compare reception gaps and fresh readings. See the [CPU measurements and limits](../README.md#reduce-sdr-cpu-use).
+
+New installations expose both settings in Advanced/plain setup. CLI values also apply to Default setup:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)" -- --fast-math true --algorithm both
+```
+
+For an **existing** installation, first run `update` inside the LXC and confirm v0.7.0 or newer with `update --status`. Then run the following as root on the **Proxmox node**, replacing every `CTID` with the actual number. This stops monitoring during the change and replaces only these two nonsecret settings:
+
+```bash
+systemctl disable --now diehl2mqtt-lxc@CTID.timer
+systemctl stop diehl2mqtt-lxc@CTID.service
+pct shutdown CTID
+sed -i '/^lxc\.environment\(\.runtime\)\?: WMBUS_\(FAST_MATH\|ALGORITHM\)=/d' /etc/pve/lxc/CTID.conf
+cat >> /etc/pve/lxc/CTID.conf <<'EOF'
+lxc.environment.runtime: WMBUS_FAST_MATH=true
+lxc.environment.runtime: WMBUS_ALGORITHM=both
+EOF
+systemctl enable --now diehl2mqtt-lxc@CTID.timer
+```
+
+The monitor starts the CT again. Check its console for `algorithm=both, fast_math=true` and confirm fresh readings. To restore defaults, repeat with `false` and `both`. Application updates preserve these CT environment settings. Editing a guest shell's environment alone does not configure its main receiver.
 
 ## USB access and automatic restart
 

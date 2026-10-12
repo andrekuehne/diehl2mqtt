@@ -23,6 +23,8 @@ Everything is configured in the Configuration tab, including passwords and the A
 
 Required: `meter_id` is **text containing exactly eight digits**, preserving leading zeros. `aes_key` is exactly **32 hexadecimal characters**. There is no preset real ID or AES key. The driver and radio mode are fixed to `dme173` / C1, with default `frequency: 868.95M`. `meter_name` only labels the decoded JSON.
 
+**CPU tuning** (0.7.0+): `fast_math: true` enables approximate atan at runtime. `algorithm` selects `both` (default), `runlength`, or `time2`; a single algorithm reduces CPU and reception diversity. No recompilation is required. Defaults remain `fast_math: false` and `algorithm: both`, including when upgrading older options. Start with fast math and both algorithms, compare fresh readings/reception gaps, and revert if reception worsens. A short desktop test used about 11% of one core with fast math versus 19% with defaults; only two distinct telegrams were compared, so weak-signal behavior needs local verification. See [CPU measurements](https://github.com/andrekuehne/diehl2mqtt#reduce-sdr-cpu-use). Save and restart the add-on after changes; the startup log shows the selected options.
+
 **Automatic MQTT** (`mqtt_auto: true`, default) uses the MQTT service registered with Supervisor, normally the Mosquitto add-on. Have the broker running before starting the reader. Its host, port, username/password and TLS flag replace the manual broker fields; topic/discovery options still apply. If no service is registered, use manual mode.
 
 **Manual MQTT**: disable `mqtt_auto`, then set `mqtt_host`, `mqtt_port`, `mqtt_username`, `mqtt_password` and `mqtt_tls`. Host is a hostname/IP without `mqtt://`. For anonymous MQTT leave both username and password blank. TLS verifies the broker hostname and certificate. System CAs are used unless you supply `mqtt_ca_certificate`. Optional mutual TLS uses `mqtt_client_certificate` and `mqtt_client_key` together. Paste PEM values in Configuration's YAML editor with `|` block syntax; the client key must be unencrypted. Restart the add-on after saving configuration changes.
@@ -34,6 +36,8 @@ meter_id: "12345678"
 aes_key: "REPLACE_WITH_YOUR_32_HEX_CHARACTER_KEY"
 meter_name: Water
 frequency: 868.95M
+fast_math: false
+algorithm: both
 mqtt_auto: false
 mqtt_host: "192.0.2.10"
 mqtt_port: 1883
@@ -62,7 +66,7 @@ Complete decoded JSON, QoS 1, retained state/discovery, online/offline availabil
 
 # Updates and troubleshooting
 
-Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.6.0` is the add-on image tag; `v0.6.0` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
+Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.7.0` is the add-on image tag; `v0.7.0` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
 
 The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
 
