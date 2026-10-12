@@ -31,7 +31,7 @@ From v0.8.0, CI signs standalone and HA image **digests** using Cosign's keyless
 Install [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/) using Sigstore's official instructions. After downloading the checksum file, its bundle and the desired archives from the **same release**, verify before extracting/executing:
 
 ```sh
-version=v0.8.0
+version=v0.8.1
 identity="https://github.com/andrekuehne/diehl2mqtt/.github/workflows/build.yml@refs/tags/$version"
 cosign verify-blob --bundle SHA256SUMS.sigstore.json \
   --certificate-identity "$identity" \
@@ -51,6 +51,6 @@ cosign verify --certificate-identity "$identity" \
 
 ## Local confinement tests
 
-`python3 scripts/test-apparmor.py` needs Docker, AppArmor and passwordless sudo for the AppArmor parser, as provided on CI runners. `--loader docker` instead uses a temporary helper with MAC_ADMIN and a securityfs mount. Both modes load a unique disposable profile, run real decoder/libusb binaries against public/synthetic data, assert denied shell execution and writes, verify UID/capabilities and health/signals, then remove the profile and test volume. They do not attach USB or contact a production broker. The test helper's privileges are not requested by the installed app.
+`python3 scripts/test-apparmor.py` needs Docker, AppArmor and passwordless sudo for the AppArmor parser, as provided on CI runners. `--loader docker` instead uses a temporary helper with MAC_ADMIN and a securityfs mount. Both modes load a unique disposable profile, verify bus-directory access and positive libusb enumeration when USB root hubs exist, run real decoder/libusb binaries against public/synthetic data, assert denied shell execution and writes, verify UID/capabilities and health/signals, then remove the profile and test volume. They do not attach USB or contact a production broker. The test helper's privileges are not requested by the installed app.
 
 Actual HAOS USB streaming, host reboot, physical reconnect and updating an existing installation remain destination acceptance checks.

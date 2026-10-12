@@ -45,6 +45,8 @@ profile diehl2mqtt flags=(attach_disconnected,mediate_deleted) {
   /dev/bus/usb/** rw,
   /run/udev/ r,
   /run/udev/** r,
+  # libudev enumerates the bus directory before filtering USB devices.
+  /sys/bus/ r,
   /sys/bus/usb/ r,
   /sys/bus/usb/** r,
   /sys/devices/ r,

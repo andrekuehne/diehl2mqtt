@@ -1,5 +1,11 @@
 # Verification record
 
+## USB enumeration confinement regression (v0.8.1)
+
+After upgrading to 0.8.0, the owner reported that the previously working HAOS SDR was no longer found. The regression was reproduced locally: the non-root runtime enumerated seven USB devices without the custom profile and zero with it. Kernel audit logs identified an AppArmor denial when libudev opened `/sys/bus/`. Allowing read-only access to this directory restored positive libusb enumeration under the enforced profile. No USB device was opened and no RF stream or production broker was used.
+
+The regression test now explicitly enumerates `/sys/bus/` on every runner and checks positive libusb discovery when USB root hubs exist. A negative RTL-SDR lookup alone had incorrectly passed in 0.8.0. Non-root UID, capability removal, denied shell/writes, actual offline decoding, health and signal checks continue to pass. Destination HAOS reception after this patch still needs owner confirmation.
+
 ## App confinement and signed, vulnerability-gated releases (v0.8.0)
 
 The app remains experimental. A custom AppArmor profile was loaded and enforced on the local Linux Docker host, with a unique disposable name and no real USB/broker access. The test used the actual pinned wmbusmeters decoder and public fixture, actual libusb enumeration without a dongle, TLS trust-store loading, the watchdog endpoint and signal handling. Shell execution and writes outside the private runtime were denied. A root-owned group-writable regular-file fixture verified the selected USB-style DAC permissions; it is not a USB streaming test. The temporary profile and volume were removed afterward.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1
+
+- Fix SDR discovery under AppArmor by permitting read-only enumeration of `/sys/bus/`, required by libudev. Non-root operation and the other confinement rules remain enabled.
+- Test bus-directory access even on hardware-free CI machines and require successful libusb enumeration whenever USB root hubs exist.
+
 ## 0.8.0
 
 - Add an enforced AppArmor profile limiting executable access, filesystem writes and device access; protection mode stays enabled.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run inside the enforced production profile; only public test data."""
 import json
+import ctypes
 import os
 from pathlib import Path
 import signal
@@ -69,6 +70,28 @@ import socket
 import ssl
 assert socket.getaddrinfo('localhost', 1883)
 assert ssl.create_default_context().cert_store_stats()['x509_ca'] > 0
+# A negative RTL-SDR lookup alone cannot detect broken USB enumeration. Check
+# libudev's parent-directory access even on CI VMs with no USB controllers.
+# Where root hubs exist, libusb must actually find devices. Read descriptors
+# only: never open any host USB device or start RF reception.
+assert list(Path('/sys/bus').iterdir()), 'Cannot enumerate sysfs buses'
+root_hubs = list(Path('/sys/bus/usb/devices').glob('usb*'))
+libusb = ctypes.CDLL('libusb-1.0.so.0')
+context = ctypes.c_void_p()
+devices = ctypes.c_void_p()
+libusb.libusb_get_device_list.restype = ctypes.c_ssize_t
+assert libusb.libusb_init(ctypes.byref(context)) == 0
+try:
+    count = libusb.libusb_get_device_list(context, ctypes.byref(devices))
+    try:
+        assert count >= 0, f'USB enumeration failed with error {count}'
+        if root_hubs:
+            assert count >= len(root_hubs), f'USB enumeration found {count} devices for {len(root_hubs)} root hubs'
+    finally:
+        if count >= 0:
+            libusb.libusb_free_device_list(devices, 1)
+finally:
+    libusb.libusb_exit(context)
 result = subprocess.run(['rtl_sdr', '-f', '868.95M', '-s', '1600000', '-'], capture_output=True, timeout=10)
 assert result.returncode != 0 and b'No supported devices' in result.stderr
 child = subprocess.Popen(['rtl_wmbus', '-f', '-p', 'S'], stdin=subprocess.PIPE,

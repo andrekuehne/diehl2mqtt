@@ -1,5 +1,5 @@
 name: Diehl Hydrus to MQTT
-version: "0.8.0"
+version: "0.8.1"
 slug: diehl2mqtt
 description: Read a Diehl HYDRUS water meter with an RTL-SDR and publish all decoded data to MQTT.
 url: https://github.com/andrekuehne/diehl2mqtt
