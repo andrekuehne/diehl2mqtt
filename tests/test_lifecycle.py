@@ -7,10 +7,46 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from watermeter.health import healthy, identity
+from watermeter.settings import Settings
+from watermeter.supervisor import Supervisor
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_usb_diagnostics_keep_errors_without_upstream_secrets(self):
+        supervisor = Supervisor(Settings(), {}, "/unused", "/unused")
+        with patch("watermeter.supervisor.log") as output:
+            supervisor.diagnostic(0, b"usb_open err")
+            supervisor.diagnostic(0, b"or -3\nprivate-key=never-log-this\n")
+            supervisor.diagnostic(0, b"usb_claim_interface error -6\nFailed to open rtlsdr device #0.\n")
+            supervisor.diagnostic(0, b"usb_open error -3\n")
+            supervisor.diagnostic(2, b"decrypt failed: never-log-this\n")
+        messages = [call.args[0] for call in output.call_args_list]
+        self.assertIn("Pipeline component 1: USB access denied (permissions or security policy) (libusb -3)", messages)
+        self.assertIn("Pipeline component 1: USB device busy (another reader or kernel driver) (libusb -6)", messages)
+        self.assertIn("Pipeline component 1: could not open RTL-SDR", messages)
+        self.assertEqual(sum("libusb -3" in message for message in messages), 1)
+        self.assertNotIn("never-log-this", "\n".join(messages))
+        self.assertLessEqual(len(supervisor.diagnostic_tails[0]), 256)
+
+    def test_failure_drains_pending_diagnostic_and_reports_exit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            supervisor = Supervisor(Settings(), dict(os.environ), tmp, tmp)
+            child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stderr.write('usb_open error -4\\n'); sys.exit(9)"],
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            supervisor.children.append(child)
+            os.set_blocking(child.stderr.fileno(), False)
+            try:
+                child.wait(timeout=3)
+                with patch("watermeter.supervisor.log") as output:
+                    self.assertEqual(supervisor.failure("pipeline stopped"), 1)
+                messages = [call.args[0] for call in output.call_args_list]
+                self.assertIn("Pipeline component 1: USB device disconnected (libusb -4)", messages)
+                self.assertIn("Pipeline component 1 exited with code 9", messages)
+            finally:
+                supervisor.cleanup()
+
     def launch(self, root, mode):
         return subprocess.Popen([sys.executable, "tests/lifecycle_harness.py", str(root), mode],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

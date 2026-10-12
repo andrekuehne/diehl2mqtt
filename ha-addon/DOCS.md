@@ -68,11 +68,12 @@ Complete decoded JSON, QoS 1, retained state/discovery, online/offline availabil
 
 # Updates and troubleshooting
 
-Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.7.0` is the add-on image tag; `v0.7.0` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
+Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.7.1` is the add-on image tag; `v0.7.1` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
 
 The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
 
 - **No SDR / permission / claimed driver:** check Proxmox VM passthrough and the add-on Log. Only one program may use the dongle. If the guest's DVB driver claims it, inspect the HA OS host driver binding; do not disable protection mode or add broad privileges as a first step.
+- **Receiver exits but HA OS lists the dongle:** `lsusb` proves enumeration, not that the add-on can open and stream from it. Version 0.7.1 reports specific libusb errors and process exit codes: component 1 is `rtl_sdr`, 2 is `rtl_wmbus`, and 3 is `wmbusmeters`. Access denied (`-3`), a busy device (`-6`) and a disconnected device (`-4`) need different fixes. Paste these classified messages when reporting failures; raw decoder errors remain suppressed because they may contain keys or telegrams.
 - **USB removed:** the receiver cleans up and retries every five seconds. Reconnect must make the device visible again to the HA VM, not just to Proxmox. Enable Watchdog to recover a hung pipeline.
 - **All sensors unavailable:** inspect MQTT reconnect/receiver diagnostics and verify no old Docker or LXC reader is still publishing.
 - **Nothing discovered after deleting a device:** restart the add-on or publish `online` to `homeassistant/status` to replay discovery.

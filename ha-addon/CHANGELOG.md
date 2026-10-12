@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- Report specific USB access, busy, disconnect, kernel detach and transfer errors without printing upstream secrets or telegrams.
+- Preserve pending error messages when a pipeline process exits, and report its exit code. Receiver retries continue as before.
+
 ## 0.7.0
 
 - Configure fast demodulator math and select both, runlength, or time2 algorithms in Configuration. Defaults preserve existing reception behavior.

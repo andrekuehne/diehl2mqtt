@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import selectors
 import shutil
 import signal
@@ -38,6 +39,7 @@ class Supervisor:
         self.stop_signal = None
         self.last_received = None
         self.diagnostics = set()
+        self.diagnostic_tails = {}
 
     def stop(self, signum, _frame):
         self.stop_signal = signum
@@ -55,18 +57,56 @@ class Supervisor:
 
     def diagnostic(self, index, data):
         # Do not relay upstream text: even config parser errors may contain secrets.
-        category = "diagnostic (upstream text suppressed)"
-        lower = data.lower()
+        # Pipe reads need not align with messages. Keep only a bounded overlap.
+        lower = self.diagnostic_tails.get(index, b"") + data.lower()
+        self.diagnostic_tails[index] = lower[-256:]
+        categories = []
         for token, safe in ((b"no supported devices", "no supported SDR found"),
                             (b"permission", "USB permission problem"),
                             (b"kernel driver is active", "device claimed by kernel driver"),
+                            (b"failed to detach", "could not detach USB kernel driver"),
+                            (b"detaching kernel driver failed", "could not detach USB kernel driver"),
+                            (b"failed to open rtlsdr", "could not open RTL-SDR"),
+                            (b"usb_claim_interface", "could not claim USB interface"),
+                            (b"no matching devices", "no matching SDR found"),
+                            (b"short write", "SDR output pipe closed or short write"),
+                            (b"failed to submit transfer", "could not submit USB transfer"),
                             (b"decrypt", "decryption diagnostic; verify runtime key")):
             if token in lower:
-                category = safe
-                break
-        if (index, category) not in self.diagnostics:
-            self.diagnostics.add((index, category))
-            log(f"Pipeline component {index + 1}: {category}")
+                categories.append(safe)
+        # Decode only the known libusb status codes, never arbitrary upstream text.
+        usb_errors = {-1: "USB I/O error", -2: "invalid USB parameter",
+                      -3: "USB access denied (permissions or security policy)",
+                      -4: "USB device disconnected", -5: "USB device not found",
+                      -6: "USB device busy (another reader or kernel driver)",
+                      -7: "USB transfer timed out", -8: "USB transfer overflow",
+                      -9: "USB pipe error", -10: "USB operation interrupted",
+                      -11: "USB memory allocation failed", -12: "USB operation unsupported",
+                      -99: "USB operation failed"}
+        for match in re.finditer(rb"(?:libusb\w*|usb_open|usb_claim_interface) (?:error|failed(?: with)?) (-[0-9]{1,2})(?![0-9])", lower):
+            code = int(match[1])
+            if code in usb_errors:
+                categories.append(f"{usb_errors[code]} (libusb {code})")
+        for category in categories or ["diagnostic (upstream text suppressed)"]:
+            if (index, category) not in self.diagnostics:
+                self.diagnostics.add((index, category))
+                log(f"Pipeline component {index + 1}: {category}")
+
+    def failure(self, message):
+        # An early exit can race the selector. Read pending errors before cleanup
+        # closes the pipes; otherwise the useful USB failure can be lost entirely.
+        for index, child in enumerate(self.children):
+            try:
+                data = os.read(child.stderr.fileno(), 65536)
+            except BlockingIOError:
+                data = b""
+            if data:
+                self.diagnostic(index, data)
+            code = child.poll()
+            if code is not None:
+                log(f"Pipeline component {index + 1} exited with code {code}")
+        log(message)
+        return 1
 
     def cleanup(self):
         sig = self.stop_signal or signal.SIGTERM
@@ -119,16 +159,14 @@ class Supervisor:
             log(f"Demodulator: algorithm={self.settings.algorithm}, fast_math={str(self.settings.fast_math).lower()}")
             while not self.stop_signal:
                 if any(child.poll() is not None for child in self.children):
-                    log("Pipeline member exited unexpectedly; restarting container is required")
-                    return 1
+                    return self.failure("Receiver pipeline failed; check component diagnostics above")
                 self.status()
                 for event, _ in selector.select(0.2):
                     data = os.read(event.fileobj.fileno(), 65536)
                     if not data:
                         selector.unregister(event.fileobj)
                         if event.data == "decoder":
-                            log("Unexpected decoder EOF")
-                            return 1
+                            return self.failure("Unexpected decoder EOF; check component diagnostics above")
                         continue
                     if event.data != "decoder":
                         self.diagnostic(event.data, data)

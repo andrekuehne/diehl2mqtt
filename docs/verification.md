@@ -1,5 +1,9 @@
 # Verification record
 
+## Receiver failure diagnostics (v0.7.1)
+
+A destination HA OS VM enumerated the RTL-SDR but its add-on receiver pipeline exited. The original diagnostic filter obscured the cause; no specific USB cause or hardware fix has yet been confirmed on that VM. Diagnostics now classify known USB failures without relaying upstream text, handle split pipe messages and drain pending stderr before failure cleanup. Tests cover access denial, a busy device, disconnection, exit codes, deduplication and secret suppression. All 50 application tests and 32 Proxmox host tests passed locally. Destination verification requires the owner's updated add-on log.
+
 ## Local implementation acceptance
 
 The work packages were implemented and committed separately. On the owner’s Linux amd64 host, the production image/native smoke checks, private runtime configuration, supervised process lifecycle, real-broker MQTT authentication/TLS/reconnect/discovery tests, Compose USB reception and graceful restart were verified. Home Assistant’s three MQTT entities and Energy water selection were owner-confirmed after adding the sensor to the Recorder whitelist. Real meter identifiers, captured telegrams and runtime keys are omitted from public evidence.
