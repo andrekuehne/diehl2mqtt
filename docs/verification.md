@@ -50,3 +50,7 @@ The updater preserves the existing CT and runtime configuration, but does not re
 
 
 A final guest-shell check identified that `pct exec` may not inherit the image's `PYTHONPATH`. The v0.4.1 update wrapper explicitly sets its module path, and the disposable installed-layout test now invokes `update --status` with a completely empty environment plus a minimal PATH. The wrapper is now versioned with the app bundle; the Proxmox guide provides a one-time transition for v0.4.0 guests.
+
+## Community-style launcher and dialog setup (v0.5.0)
+
+The one-line `ct/diehl2mqtt.sh` launcher downloads a release-pinned standalone installer and validates its embedded SHA256 before execution. Local validation passed all 31 host-installer/interface tests, covering command-substitution launch, argument/stdin preservation, temporary cleanup, failed/corrupt downloads, default/advanced settings, confirmation defaulting to No, cancellation before host changes, leading-zero meter IDs and private password handling. A real `whiptail` dialog was exercised in a pseudo-terminal: its colored screen remained on the terminal and the synthetic password was returned only through a private pipe, never shown on screen. Plain prompts remain available without installing a UI dependency. Live node installation and hardware acceptance remain pending.

@@ -6,16 +6,35 @@ Proxmox introduced OCI application containers in [VE 9.1](https://www.proxmox.co
 
 ## Install
 
-In the node's shell, download the standalone script:
+In the **Proxmox node shell**, run:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)"
+```
+
+The one-line launcher downloads a release-pinned installer, verifies its built-in SHA256 checksum and preserves the terminal for interaction. Its temporary files are removed on exit. It uses the same dialog style as the Proxmox community scripts: Default/Advanced settings, blue terminal dialogs, storage/MQTT menus, hidden password boxes and colored status messages. This is this project's own installer; it does not depend on the community scripts framework.
+
+Default settings select the next unused CT ID, hostname `diehl2mqtt`, 1 CPU, 512 MiB RAM, 2 GiB disk and DHCP on `vmbr0`. Storage, SDR identity, meter ID and MQTT settings still require selection/entry. Advanced settings expose CT identity, RAM/disk and networking. The final summary requires confirmation before creation. Cancel/Esc exits setup; input cancellation before creation makes no host changes. Secret fields never have preset values.
+
+Pass options after Bash's command-name argument:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)" -- --memory 1024 --disk 8
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)" -- --plain
+```
+
+If `whiptail` or a suitable interactive terminal is unavailable, setup falls back to plain prompts. `--plain` explicitly selects that mode. No UI dependency is silently installed.
+
+For a downloadable standalone installer or a read-only preflight check:
 
 ```bash
 curl -fLo install-proxmox.py \
   https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/scripts/install-proxmox.py
 python3 install-proxmox.py --check
-python3 install-proxmox.py --release v0.4.1
+python3 install-proxmox.py --release v0.5.0
 ```
 
-`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.4.1 deployment archive also includes this standalone installer under `scripts/`. Version v0.4.1 includes the clean guest-shell environment fix; v0.4.0 introduced native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
+`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.5.0 deployment archive also includes this standalone installer under `scripts/`. Version v0.5.0 adds the one-line launcher and dialog setup, including the v0.4.1 clean guest-shell environment fix. Version v0.4.0 introduced native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
 
 The installer prompts for:
 
@@ -30,7 +49,7 @@ The installer prompts for:
 The default allocation is 1 core, 512 MiB RAM and a 2 GiB root disk. You can answer the allocation prompts or supply values directly:
 
 ```bash
-python3 install-proxmox.py --release v0.4.1 --memory 1024 --disk 8
+python3 install-proxmox.py --release v0.5.0 --memory 1024 --disk 8
 ```
 
 RAM accepts 256–65536 MiB and disk accepts 2–1024 GiB, subject to your node/storage capacity. A larger disk leaves more room for retained application releases. The script refuses to overwrite an existing VM/CT or managed configuration. Failed installations leave any newly created CT for inspection; they never delete a guest. A failure before completion may require inspecting/removing that incomplete CT explicitly before retrying with the same ID.
@@ -115,7 +134,7 @@ update --release v0.4.1          # Select a specific published release
 update --rollback               # Return to the previous successfully installed release
 ```
 
-For a guest created with the short-lived v0.4.0 installer, use `PYTHONPATH=/opt/watermeter update --release v0.4.1` for its first update. After `update --status` reports `complete`, run `ln -sfn /opt/diehl2mqtt/current/bin/update /usr/local/bin/update` once inside that guest. This adopts the corrected, versioned wrapper. New v0.4.1 installations already have it.
+For a guest created with the short-lived v0.4.0 installer, use `PYTHONPATH=/opt/watermeter update --release v0.4.1` for its first update. After `PYTHONPATH=/opt/watermeter update --status` reports `complete`, run `ln -sfn /opt/diehl2mqtt/current/bin/update /usr/local/bin/update` once inside that guest. This adopts the corrected, versioned wrapper. New v0.4.1 installations already have it.
 
 `--yes` skips the update confirmation for intentional automation. Updating requires outbound HTTPS/DNS access to GitHub and its release-asset service. No GitHub account, token, Docker daemon or Proxmox host credentials are required in the guest.
 
