@@ -4,6 +4,8 @@ Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1
 
 ## Deploy a published image
 
+For **Proxmox VE 9.1+ without nested Docker**, use the interactive [direct LXC installer](docs/proxmox.md). It imports the published image into an unprivileged LXC and sets up the selected SDR, runtime secrets and host monitoring. Proxmox application-container support is a technology preview; destination-node testing is still required.
+
 For another Linux **amd64** host, install [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin and connect or pass through the RTL-SDR. arm64 is deferred. The deployment archive contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts.
 
 Download and unpack the release (this example installs `v0.2.0`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
@@ -291,7 +293,7 @@ Never clear a wildcard namespace. Clean up the old exact topics after changing I
 
 ## Host USB troubleshooting and Proxmox
 
-These are instructions for the owner; the project never changes modules, permissions or Proxmox configuration automatically.
+These manual troubleshooting steps apply to the Docker deployment. The explicitly invoked [Proxmox installer](docs/proxmox.md) creates/configures a new LXC and may detach the selected SDR's DVB driver; it does not blacklist modules globally.
 
 ```bash
 lsusb
@@ -326,7 +328,7 @@ sudo modprobe dvb_usb_rtl28xxu
 
 On Proxmox, run Docker **inside a Linux guest**, not implicitly on the VE host. For a VM, add the SDR in VM Hardware → USB Device, selecting the device/physical port appropriate to your setup, then confirm `lsusb` and permissions inside the guest before Docker. Avoid unstable changing bus/device-number assignments. The guest's kernel/udev/USB nodes and Docker cgroups each have to permit access.
 
-LXC adds host-to-LXC bind mounts, USB major-189 cgroup allowances and unprivileged UID/GID mapping constraints before Docker's own controls. Hotplug nodes must remain visible and accessible at every layer. A Linux VM is the simpler isolation boundary for nested Docker/USB. VM/LXC/rootless passthrough and physical unplug/replug stress have not been verified here. The supervised reader exits on component failure; Docker restart then retries device opening. Reconnect changes bus/device numbers, so mount the bus and verify node access again.
+For Docker nested inside LXC, host-to-LXC USB mounts, cgroup allowances and unprivileged UID/GID mapping constraints precede Docker's own controls. A Linux VM is the simpler isolation boundary for that deployment. On Proxmox VE 9.1+, the [direct OCI/LXC installer](docs/proxmox.md) instead maps a single SDR device and uses a host timer to refresh its address and restart the reader. Actual Proxmox boot, reception and unplug/replug behavior still require destination-node validation.
 
 ## Tests, CI and reviewed updates
 
