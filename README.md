@@ -2,6 +2,23 @@
 
 Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1, and emit newline-delimited JSON. Optional MQTT publishes retained readings and automatically discovers three Home Assistant sensors. The actual image, connected R820T dongle, fixture, Compose restarts and authenticated live MQTT delivery were tested on the owner's Ubuntu host. See [verification](docs/verification.md) for evidence and remaining external checks.
 
+## Deploy a published image
+
+For another Linux **amd64** host, download the deployment archive from [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases), extract it and follow its README. It contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts. Install Docker Engine/Compose and connect or pass through the RTL-SDR first. arm64 is deferred.
+
+The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.1.0`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration.
+
+If using this source checkout's Compose files instead, copy `.env.example` to `.env.local`, set `WATERMETER_IMAGE` to the published digest plus your broker/meter options, and run the secret setup scripts. Then:
+
+```bash
+docker compose --env-file .env.local \
+  -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml pull
+docker compose --env-file .env.local \
+  -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml up -d --no-build --wait
+```
+
+The standalone release archive omits the Compose build section entirely. For anonymous MQTT omit the auth override; for JSON-only use the base file. Keep only one receiver running for a given dongle and MQTT client identity. If Recorder has an include whitelist, include Total water so it can appear in Home Assistant Energy.
+
 ```
 RTL2832U USB → rtl_sdr (868.95 MHz / 1.6 Msps) → rtl_wmbus
             → wmbusmeters (dme173 + runtime AES config)
@@ -286,7 +303,18 @@ LXC adds host-to-LXC bind mounts, USB major-189 cgroup allowances and unprivileg
 
 This builds the test target, adds a disposable Mosquitto only to that image, runs with `--network none` on loopback, and cleans up. It tests secrets, identity/decryption boundaries, silence/failure/EOF/signals/descendants, JSON flushing during broker outage, retained/QoS/birth/LWT/reconnect/auth/TLS behavior and stable discovery. It does not need the dongle, real AES key or production broker. Correct-key fixture and live acceptance remain separate mandatory owner-input checks. See [verification](docs/verification.md).
 
-The GitHub workflow handles PR/push/manual builds on amd64, caches normal builds, and performs a Monday 04:17 UTC rebuild with `pull: true` and build cache disabled. The base digest stays pinned until reviewed updates are merged. Dependabot proposes Docker digest/Action changes. Paho and decoder revisions are changed explicitly; no branch head is adopted automatically. Optional GitHub Actions `METER_AES_KEY` is used only by trusted main/non-PR runtime decoding, never builds or untrusted PR execution. Absent secret is a clear skip. No `pull_request_target` runs PR code. Explicit main-branch manual publication may push GHCR after tests with limited package permissions. Without a GitHub remote these definitions are locally validated, not claimed executed/published. arm64 is not claimed supported/tested.
+The GitHub workflow handles PR/push/manual builds on amd64, caches normal builds, and performs a Monday 04:17 UTC rebuild with `pull: true` and build cache disabled. The base digest stays pinned until reviewed updates are merged. Dependabot proposes Docker digest/Action changes. Paho and decoder revisions are changed explicitly; no branch head is adopted automatically. Optional GitHub Actions `METER_AES_KEY` is used only by trusted main/non-PR runtime decoding, never builds or untrusted PR execution. Absent secret is a clear skip; no runtime secrets need uploading to GitHub. No `pull_request_target` runs PR code. PR tests have read-only permissions and cannot publish.
+
+Successful main pushes and scheduled builds automatically publish `latest` to GHCR. A manual main run publishes only when its `publish` input is enabled. The separate publish job loads the exact production image saved by the successful test job, then tags and pushes it without rebuilding. Each publication also gets a unique full-commit/run/attempt tag. Images include source-repository/revision labels. Only the publication job can write packages/releases; test jobs remain read-only.
+
+To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Use a new version for subsequent releases. CI rejects malformed version tags and commits outside main's history. After passing the same tests, it publishes the version tag and creates a GitHub release with a build-free deployment archive pinned to the actual registry digest, pinned unmodified native source archives plus project build materials/runtime package versions, an image reference and `SHA256SUMS`. A version release does not move `latest`; that follows main. The package must be public in GitHub's package settings for anonymous pulls (package visibility is separate from repository visibility). Hosted results are recorded in [verification](docs/verification.md). arm64 is not claimed supported/tested.
 
 Inspect installed versions and read-only update candidates:
 

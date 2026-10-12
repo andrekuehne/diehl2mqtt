@@ -8,3 +8,5 @@ The image builds unmodified upstream software with pinned provenance:
 - Debian rtl-sdr/libusb and other runtime packages: package metadata/individual distribution licenses apply.
 
 Upstream notices are copied into /usr/share/watermeter/licenses and resolved source/base/client versions into /usr/share/watermeter/versions.txt. Runtime Debian packages are enumerated in packages.txt. Redistributors must satisfy corresponding-source obligations for covered binaries and carry applicable notices. Preserve this repository's Dockerfile, dependency pins and build instructions alongside corresponding upstream source when distributing.
+
+Versioned GitHub releases attach a native source/build archive containing the exact committed project and unmodified pinned rtl-wmbus/wmbusmeters source trees, notices and runtime Debian package versions. Paho and Debian source locations are recorded in that archive's README. The deployment archive and image reference identify the matching binary image by digest. Preserve those materials when redistributing a release.
