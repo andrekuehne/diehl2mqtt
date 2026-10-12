@@ -23,6 +23,8 @@ MQTT_TLS=false
 
 `METER_ID` is the water meter's **eight-digit Wireless M-Bus ID**, not the SDR's USB serial/vendor/product ID. Preserve leading zeros, for example `00123456`. It is deliberately blank in the release's example settings and must be supplied. Keep `METER_DRIVER=dme173` and `WMBUS_MODE=c1`; the supported meter is Diehl HYDRUS 2.0 / DME173. The image is already pinned to this release's registry digest, so retain `WATERMETER_IMAGE`. Use a broker address reachable from Docker; `.local` mDNS may fail inside containers.
 
+All source defaults and test IDs are dummy examples. Use your own meter ID here; the synthetic fixture's public test key is never a production key.
+
 `setup-secret.sh` prompts for the AES key supplied for your meter: **exactly 32 hexadecimal characters** (16 bytes), without spaces or a `0x` prefix. Input is hidden and saved only to `secrets/meter_aes_key`. The password script similarly creates `secrets/mqtt_password`. The directory uses mode 0700 and files mode 0600; existing files are not overwritten. Compose mounts the key read-only at `/run/secrets/meter_aes_key` and supplies its path through `METER_AES_KEY_FILE`. Keep both secrets out of `.env`, command arguments, GitHub and the image. The ID itself belongs in `.env`.
 
 For authenticated MQTT and Home Assistant discovery:

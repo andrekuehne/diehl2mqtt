@@ -1,5 +1,7 @@
 # Diehl HYDRUS water meter implementation plan
 
+Privacy revision: all meter identifiers are dummy examples. The supplied capture has been replaced with a synthetic telegram encrypted using the public test key `00112233445566778899aabbccddeeff`. Production IDs and keys must be provided locally at deployment. This privacy requirement supersedes the historical owner-specific-default and original-fixture instructions below.
+
 This is the complete implementation brief for the next agent. Build a standalone Docker project in `/home/andre/Projects/Watermeter-Docker` that reads the owner's Diehl HYDRUS 2.0 / DME173 water meter through an RTL-SDR, decrypts and decodes readings, emits JSON, and optionally publishes to MQTT with Home Assistant automatic discovery. No earlier conversation or attachment is needed.
 
 Prepared on 12 October 2026. Status: planned; no application implementation, image build, decryption test, or hardware test has been performed as part of creating this plan. The project directory has no existing application. This document is the requirements baseline, and should remain in the finished repository.

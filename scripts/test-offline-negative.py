@@ -1,4 +1,4 @@
-"""Run inside the image with a mounted owner key; never emit key contents."""
+"""Run inside the image with the public synthetic fixture/key only."""
 from dataclasses import replace
 from pathlib import Path
 import os
@@ -10,7 +10,7 @@ from watermeter.settings import Settings, secret, scrub_environment, ConfigError
 
 require_tmpfs()
 settings = Settings.load(offline=True)
-key = secret(os.environ, "METER_AES_KEY", aes=True)
+key = "00112233445566778899aabbccddeeff"  # Public synthetic test data.
 env = scrub_environment()
 fixture = "/usr/share/watermeter/fixture.hex"
 assert decode(settings, key, env, fixture)

@@ -6,16 +6,16 @@ Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1
 
 For another Linux **amd64** host, install [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin and connect or pass through the RTL-SDR. arm64 is deferred. The deployment archive contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts.
 
-Download and unpack the release (this example installs `v0.1.1`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
+Download and unpack the release (this example installs `v0.2.0`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.1.1/diehl2mqtt-v0.1.1-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.1.1/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.2.0/diehl2mqtt-v0.2.0-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.2.0/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.1.1-deploy.tar.gz
-cd diehl2mqtt-v0.1.1
+tar -xzf diehl2mqtt-v0.2.0-deploy.tar.gz
+cd diehl2mqtt-v0.2.0
 cp .env.example .env
 ```
 
@@ -30,7 +30,7 @@ MQTT_USERNAME=mqtt
 MQTT_TLS=false
 ```
 
-`METER_ID` is the water meter's **eight-digit Wireless M-Bus ID**. Preserve leading zeros, for example `00123456`. It is separate from the RTL-SDR USB serial/vendor/product IDs. The release requires you to set it explicitly. Keep `METER_DRIVER=dme173`, `WMBUS_MODE=c1` and the release's `WATERMETER_IMAGE` digest from the example file. The supported meter is Diehl HYDRUS 2.0 / DME173; changing the ID does not add support for a different driver. Use a broker address reachable from containers; `.local` mDNS may not resolve there.
+`METER_ID` is the water meter's **eight-digit Wireless M-Bus ID**. Preserve leading zeros, for example `00123456`. It is separate from the RTL-SDR USB serial/vendor/product IDs. The release requires you to set it explicitly. Source/image defaults use dummy ID `12345678`, never an owner ID. Keep `METER_DRIVER=dme173`, `WMBUS_MODE=c1` and the release's `WATERMETER_IMAGE` digest from the example file. The supported meter is Diehl HYDRUS 2.0 / DME173; changing the ID does not add support for a different driver. Use a broker address reachable from containers; `.local` mDNS may not resolve there.
 
 Supply the meter's AES key and MQTT password interactively:
 
@@ -100,7 +100,7 @@ docs/verification.md                  PASS/FAIL/NOT RUN evidence
 .github/dependabot.yml                reviewed Docker/Action update proposals
 ```
 
-`secrets/` and `.env.local` are local, ignored inputs; they are excluded from Docker context and Git. No key is included in examples, fixtures, images, builds or commits.
+`secrets/` and `.env.local` are local, ignored inputs; they are excluded from Docker context and Git. No production key is included in examples, fixtures, images, builds or commits. The encrypted fixture uses dummy ID `12345678` and public test key `00112233445566778899aabbccddeeff`; never use that test key for a real meter.
 
 ## Ubuntu quick start
 
@@ -110,7 +110,7 @@ Install Docker Engine and the Compose plugin from [Docker's Ubuntu instructions]
 cd /home/andre/Projects/Watermeter-Docker
 docker build --pull -t watermeter:local .
 ./scripts/setup-secret.sh
-METER_AES_KEY_FILE="$PWD/secrets/meter_aes_key" ./scripts/test-offline.sh
+./scripts/test-offline.sh
 ./scripts/test-sdr.sh
 ```
 
@@ -157,30 +157,17 @@ The container runs as root for verified access to host USB nodes and the protect
 
 `METER_AES_KEY_FILE` takes precedence whenever nonempty. Missing, unreadable, empty or malformed explicitly configured files fail; they do not fall back to the environment. File input permits one final LF or CRLF, then requires exactly 32 hexadecimal characters. Arbitrary whitespace, extra lines and environment newlines are rejected. Runtime-generated decoder files have mode 0600 inside a private 0700 directory on `/run/watermeter` tmpfs, and are removed on exit. The application refuses secret use without this tmpfs. Key/password environment settings are removed before child processes start. No key is used in process arguments. Upstream diagnostic text is suppressed because a configuration error could otherwise echo a secret; safe categories still identify missing devices, USB access and decryption trouble.
 
-For a temporary environment test, use hidden input and pass the variable by name:
+The bundled telegram is entirely synthetic: dummy meter ID `12345678`, a public test key, a total of 0.252 m³ and temperature 16.8 °C. No captured owner telegram is distributed. Run `./scripts/test-offline.sh` to decode it without USB, a broker or production secrets. Offline mode pins the synthetic ID/driver, has a ten-second timeout and requires a finite total with matching identity. To test your real key, configure your own `METER_ID` and use live reception; the synthetic fixture cannot validate a production key.
 
-```bash
-read -rsp 'AES key: ' METER_AES_KEY; echo
-export METER_AES_KEY
-./scripts/test-offline.sh
-unset METER_AES_KEY
-```
-
-Environment-based Docker secrets can be visible in container metadata. Files are recommended. Set `METER_AES_KEY_FILE` to an absolute host path to use the offline script's protected bind-mount mode; remove that setting if intentionally testing the environment mode.
-
-The fixture is the exact encrypted telegram in the plan. The offline command disables networking and needs neither USB nor MQTT. It pins the original fixture ID/driver independently of live overrides, has a ten-second decoder timeout, and requires real finite `total_m3` with matching identity. Header-only packets are rejected. Optional fields are preserved; no current reading is expected to equal the historical fixture value.
-
-Correct-key negative checks, after setup:
+Additional negative checks:
 
 ```bash
 docker run --rm --network none --tmpfs /run/watermeter:mode=0700 \
-  --mount "type=bind,src=$PWD/secrets/meter_aes_key,dst=/run/secrets/meter_aes_key,readonly" \
   --mount "type=bind,src=$PWD/scripts/test-offline-negative.py,dst=/test-negative.py,readonly" \
-  -e METER_AES_KEY_FILE=/run/secrets/meter_aes_key \
   --entrypoint python watermeter:local /test-negative.py
 ```
 
-This first proves the fixture decrypts, then rejects an ephemeral wrong key, wrong ID, unsupported driver and corrupted ciphertext. It prints no secret. The upstream `meter=dme173` identity is retained and normalized with `driver=dme173`. Original numeric fields are retained without offsets, rounding or consumption calculations. Some upstream legacy period/date fields in this meter's fixture look unusual; they are preserved without creating discovery entities or assigning billing meaning.
+These checks decode the synthetic fixture and reject a random wrong key, wrong ID, unsupported driver and corrupted ciphertext. Production readings preserve upstream fields and precision without offsets, rounding or consumption calculations.
 
 ## MQTT and Home Assistant
 
@@ -347,17 +334,17 @@ LXC adds host-to-LXC bind mounts, USB major-189 cgroup allowances and unprivileg
 ./scripts/test-mqtt.sh
 ```
 
-This builds the test target, adds a disposable Mosquitto only to that image, runs with `--network none` on loopback, and cleans up. It tests secrets, identity/decryption boundaries, silence/failure/EOF/signals/descendants, JSON flushing during broker outage, retained/QoS/birth/LWT/reconnect/auth/TLS behavior and stable discovery. It does not need the dongle, real AES key or production broker. Correct-key fixture and live acceptance remain separate mandatory owner-input checks. See [verification](docs/verification.md).
+This builds the test target, adds a disposable Mosquitto only to that image, runs with `--network none` on loopback, and cleans up. It tests secrets, identity/decryption boundaries, silence/failure/EOF/signals/descendants, JSON flushing during broker outage, retained/QoS/birth/LWT/reconnect/auth/TLS behavior and stable discovery. It does not need the dongle, real AES key or production broker. The positive synthetic fixture is also verified with its public test key; real-key/live reception remains a separate destination-host check. See [verification](docs/verification.md).
 
-The GitHub workflow handles PR/push/manual builds on amd64, caches normal builds, and performs a Monday 04:17 UTC rebuild with `pull: true` and build cache disabled. The base digest stays pinned until reviewed updates are merged. Dependabot proposes Docker digest/Action changes. Paho and decoder revisions are changed explicitly; no branch head is adopted automatically. Optional GitHub Actions `METER_AES_KEY` is used only by trusted main/non-PR runtime decoding, never builds or untrusted PR execution. Absent secret is a clear skip; no runtime secrets need uploading to GitHub. No `pull_request_target` runs PR code. PR tests have read-only permissions and cannot publish.
+The GitHub workflow handles PR/push/manual builds on amd64, caches normal builds, and performs a Monday 04:17 UTC rebuild with `pull: true` and build cache disabled. The base digest stays pinned until reviewed updates are merged. Dependabot proposes Docker digest/Action changes. Paho and decoder revisions are changed explicitly; no branch head is adopted automatically. CI decrypts only the synthetic fixture with its public test key. No production AES key or MQTT password is uploaded to GitHub or needed by any CI event. No `pull_request_target` runs PR code. PR tests have read-only permissions and cannot publish.
 
 Successful main pushes and scheduled builds automatically publish `latest` to GHCR. A manual main run publishes only when its `publish` input is enabled. The separate publish job loads the exact production image saved by the successful test job, then tags and pushes it without rebuilding. Each publication also gets a unique full-commit/run/attempt tag. Images include source-repository/revision labels. Only the publication job can write packages/releases; test jobs remain read-only.
 
 To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 Use a new version for subsequent releases. CI rejects malformed version tags and commits outside main's history. After passing the same tests, it publishes the version tag and creates a GitHub release with a build-free deployment archive pinned to the actual registry digest, pinned unmodified native source archives plus project build materials/runtime package versions, an image reference and `SHA256SUMS`. A version release does not move `latest`; that follows main. The package must be public in GitHub's package settings for anonymous pulls (package visibility is separate from repository visibility). Hosted results are recorded in [verification](docs/verification.md). arm64 is not claimed supported/tested.
@@ -384,7 +371,7 @@ After a reviewed change:
 ```bash
 docker build --pull --no-cache -t watermeter:local .
 ./scripts/test-mqtt.sh
-METER_AES_KEY_FILE="$PWD/secrets/meter_aes_key" ./scripts/test-offline.sh
+./scripts/test-offline.sh
 docker compose up -d --force-recreate
 ```
 

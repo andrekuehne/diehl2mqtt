@@ -11,6 +11,21 @@ from watermeter.settings import Settings, ConfigError
 
 @unittest.skipUnless(shutil.which("wmbusmeters"), "wmbusmeters not available")
 class OfflineTests(unittest.TestCase):
+    def test_synthetic_fixture_decrypts_with_public_key(self):
+        from dataclasses import replace
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = "tests/fixtures/dme173_12345678.hex"
+            key = "00112233445566778899aabbccddeeff"
+            readings = decode(Settings(), key, dict(os.environ), fixture, Path(tmp))
+            self.assertEqual(readings[0]["id"], "12345678")
+            self.assertEqual(readings[0]["total_m3"], 0.252)
+            self.assertEqual(readings[0]["flow_temperature_c"], 16.8)
+            for configured in (replace(Settings(), meter_id="87654321"),
+                               replace(Settings(), driver="hydrus")):
+                with self.assertRaises(ConfigError):
+                    decode(configured, key, dict(os.environ), fixture, Path(tmp))
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
     def test_encrypted_fixture_rejects_wrong_runtime_key(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(ConfigError):

@@ -1,0 +1,27 @@
+name: Withdraw superseded images
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  withdraw:
+    if: github.repository == 'andrekuehne/diehl2mqtt' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Remove only images from the withdrawn initial publication window
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate users/andrekuehne/packages/container/diehl2mqtt/versions > "$RUNNER_TEMP/old-versions.json"
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          # This fixed window predates the sanitized history. New images are excluded.
+          versions = json.loads(pathlib.Path(os.environ['RUNNER_TEMP'], 'old-versions.json').read_text())
+          selected = [v for v in versions if '2026-10-12T11:25:00Z' <= v['created_at'] < '2026-10-12T11:44:31Z']
+          for version in selected:
+              subprocess.run(['gh', 'api', '--method', 'DELETE', 'users/andrekuehne/packages/container/diehl2mqtt/versions/' + str(version['id'])], check=True)
+          print('Withdrawn image versions from the initial publication window:', len(selected))
+          PY
