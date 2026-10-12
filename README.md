@@ -4,7 +4,53 @@ Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1
 
 ## Deploy a published image
 
-For another Linux **amd64** host, download the deployment archive from [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases), extract it and follow its README. It contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts. Install Docker Engine/Compose and connect or pass through the RTL-SDR first. arm64 is deferred.
+For another Linux **amd64** host, install [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin and connect or pass through the RTL-SDR. arm64 is deferred. The deployment archive contains build-free Compose files, a release-specific image digest, example settings and hidden-input secret setup scripts.
+
+Download and unpack the release (this example installs `v0.1.1`; see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for other versions):
+
+```bash
+mkdir diehl2mqtt-install
+cd diehl2mqtt-install
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.1.1/diehl2mqtt-v0.1.1-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.1.1/SHA256SUMS
+sha256sum --ignore-missing --check SHA256SUMS
+tar -xzf diehl2mqtt-v0.1.1-deploy.tar.gz
+cd diehl2mqtt-v0.1.1
+cp .env.example .env
+```
+
+Edit `.env` with your meter and broker details. For example (replace the ID and broker address with your own):
+
+```dotenv
+METER_ID=12345678
+METER_NAME=Water
+MQTT_HOST=192.0.2.10
+MQTT_PORT=1883
+MQTT_USERNAME=mqtt
+MQTT_TLS=false
+```
+
+`METER_ID` is the water meter's **eight-digit Wireless M-Bus ID**. Preserve leading zeros, for example `00123456`. It is separate from the RTL-SDR USB serial/vendor/product IDs. The release requires you to set it explicitly. Keep `METER_DRIVER=dme173`, `WMBUS_MODE=c1` and the release's `WATERMETER_IMAGE` digest from the example file. The supported meter is Diehl HYDRUS 2.0 / DME173; changing the ID does not add support for a different driver. Use a broker address reachable from containers; `.local` mDNS may not resolve there.
+
+Supply the meter's AES key and MQTT password interactively:
+
+```bash
+./scripts/setup-secret.sh
+./scripts/setup-mqtt-secret.sh
+```
+
+The first script prompts for **exactly 32 hexadecimal characters** (16 bytes), with input hidden. It saves `secrets/meter_aes_key`; the second saves `secrets/mqtt_password`. Use the key supplied for your meter, without spaces or a `0x` prefix. Do not put either secret in `.env`, command arguments, GitHub or the image. The scripts create a mode-0700 secret directory and mode-0600 files and refuse to overwrite existing files. Compose mounts the AES file read-only at `/run/secrets/meter_aes_key` and sets `METER_AES_KEY_FILE` for the reader.
+
+Start authenticated MQTT with Home Assistant discovery:
+
+```bash
+docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml pull
+docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml up -d --wait
+docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml ps
+docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml logs --tail 20 -f
+```
+
+No registry login or local build is needed. Stop following logs with Ctrl+C; the container keeps running. Use the same Compose file list with `down` to stop/remove it. For anonymous MQTT omit the auth override and password setup; for JSON-only use just the base file and AES key. If Home Assistant Recorder has an include whitelist, include Total water before adding it to Energy.
 
 The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.1.0`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration.
 
@@ -310,8 +356,8 @@ Successful main pushes and scheduled builds automatically publish `latest` to GH
 To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 Use a new version for subsequent releases. CI rejects malformed version tags and commits outside main's history. After passing the same tests, it publishes the version tag and creates a GitHub release with a build-free deployment archive pinned to the actual registry digest, pinned unmodified native source archives plus project build materials/runtime package versions, an image reference and `SHA256SUMS`. A version release does not move `latest`; that follows main. The package must be public in GitHub's package settings for anonymous pulls (package visibility is separate from repository visibility). Hosted results are recorded in [verification](docs/verification.md). arm64 is not claimed supported/tested.

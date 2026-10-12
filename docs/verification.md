@@ -49,10 +49,10 @@ All recorded times above are UTC; Berlin is UTC+02:00 on this date. First live o
 - LIMITATION: the owner's MQTT password text matches pre-existing wording in the original requirements baseline, so an unrestricted substring scan is non-diagnostic for that value. No credential was inserted into that baseline. The audit reports this explicitly; runtime file-only loading, child environment removal, structured connection configuration, sanitized errors and synthetic random-password broker tests verify the handling without disclosing the password.
 - PASS: README contains complete file tree, exact image/offline/SDR/live/Compose/MQTT/logs/health/stop/cleanup commands, secret procedures, TLS/ACL/discovery/removal, reviewed upgrades, CI/GHCR and Ubuntu/Proxmox troubleshooting. Original IMPLEMENTATION_PLAN.md is preserved unchanged.
 
-Remaining external checks:
+External acceptance checks:
 
 1. PASS (owner-confirmed): all three sensors appear in the MQTT integration and Total water can be added to Energy after inclusion in the owner's Recorder whitelist. HA restart stability remains NOT RUN. No direct HA UI/API access was used. See the follow-up evidence below.
-2. NOT RUN: hosted GitHub Actions/GHCR. There is no configured remote; local workflow validation and equivalent image tests pass. Add a remote and run trusted CI before claiming hosted results.
+2. PASS: public GitHub repository, hosted amd64 CI, GHCR publication and versioned deployment/source assets are verified. See the publication evidence below. New destination-host USB/live reception still needs verification on that host.
 3. NOT RUN: optional physical unplug/replug stress, nonroot/rootless Docker, arm64 and Proxmox VM/LXC passthrough. Mandatory Ubuntu physical C1/stop/restart/live production-MQTT acceptance is complete.
 
 Local operation: owner-provided AES/password files and nonsecret `.env.local` stay protected and ignored. The final authenticated reader is running; use the full `.env.local` plus three-file Compose command in README for logs, stop, restart or removal. No host module/udev/passthrough configuration was changed automatically. The owner installed Docker and granted Docker socket access during verification.
@@ -63,3 +63,12 @@ Local operation: owner-provided AES/password files and nonsecret `.env.local` st
 - On 2026-10-12, a separate read-only subscriber rechecked all three exact retained discovery topics against the running implementation: all match. Total water advertises `device_class: water`, `state_class: total_increasing`, and `unit_of_measurement: m³`, matching the official Energy eligibility requirements.
 - The same subscriber received numeric `total_m3=3.257` with `received_at=2026-10-12T10:45:32.434Z` and `online` availability. The Compose reader remains healthy.
 - RESOLVED (owner-confirmed): the owner's Recorder statistics whitelist did not include the new entity in its existing globs. After adding it, Total water became selectable and the owner added it to Energy. No application or discovery change was needed. README includes the States/Statistics/Recorder troubleshooting sequence. Long-term dashboard accumulation and HA restart stability were not independently observed.
+
+## Public amd64 publication
+
+- Repository: https://github.com/andrekuehne/diehl2mqtt. The owner explicitly selected a public repository and deferred arm64. Original work-package commits are preserved. Existing SSH authentication was used because the CLI OAuth token lacks workflow-file permission; no token permissions were expanded.
+- PASS: initial main CI https://github.com/andrekuehne/diehl2mqtt/actions/runs/38242586025 and release CI https://github.com/andrekuehne/diehl2mqtt/actions/runs/38242643702 both completed successfully. Release CI ran 22 tests in 15.695 seconds, validated Compose and published the saved tested production image without rebuilding it. No runtime AES/MQTT secret was uploaded to GitHub.
+- PASS: https://github.com/andrekuehne/diehl2mqtt/releases/tag/v0.1.0 supplies deployment and pinned native source/build archives, an image reference and SHA256SUMS. Downloaded assets pass checksum verification; the deployment Compose has no build section and pins the actual image digest.
+- PASS: an empty Docker credential configuration anonymously pulled `ghcr.io/andrekuehne/diehl2mqtt:v0.1.0`, digest `sha256:d82958c5445b2db210d83b0719bcddbd694a35a8b3ba2322a66f5d64207964fb`. Inspection confirms linux/amd64, expected native pins, source-repository label and revision `61540cc261e7441237d4fc26bb2221e2ff3f8a51`.
+- PASS: the exact downloaded registry image decrypted the owner-key fixture at 2026-10-12T11:31:27.793Z with `total_m3=0.252`, correct ID/driver and no USB/network access. Supplied-secret scanning of the published image/history/layers passed with the previously documented non-diagnostic MQTT substring limitation.
+- The existing live local Compose reader was not replaced. The published image's fixture test is independent of that deployment. Physical USB/live MQTT reception on another host remains a destination-host acceptance check.

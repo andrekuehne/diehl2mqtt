@@ -63,7 +63,7 @@ jobs:
         run: |
           docker compose config --quiet
           MQTT_HOST=broker.invalid docker compose -f compose.yaml -f compose.mqtt.yaml config --quiet
-          MQTT_HOST=broker.invalid docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml config --quiet
+          MQTT_HOST=broker.invalid METER_ID=12345678 docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml config --quiet
       - name: Save the tested production image
         if: github.event_name != 'pull_request'
         run: docker save watermeter:local -o "$RUNNER_TEMP/watermeter-image.tar"
@@ -136,7 +136,11 @@ jobs:
           tar -xzf "$RUNNER_TEMP/release/diehl2mqtt-$GITHUB_REF_NAME-deploy.tar.gz" -C "$RUNNER_TEMP"
           cd "$RUNNER_TEMP/diehl2mqtt-$GITHUB_REF_NAME"
           cp .env.example .env
-          MQTT_HOST=broker.invalid docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml config --quiet
+          if METER_ID= MQTT_HOST=broker.invalid docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml config --quiet 2>/dev/null; then
+            echo 'Deployment must require an explicit meter ID'
+            exit 1
+          fi
+          METER_ID=00123456 MQTT_HOST=broker.invalid docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml config --format json | python3 -c 'import json,sys; s=json.load(sys.stdin)["services"]["watermeter"]; assert "build" not in s; assert s["environment"]["METER_ID"] == "00123456"; print("PASS: build-free deployment preserves leading zeros and requires a meter ID")'
       - name: Create versioned GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         env:
