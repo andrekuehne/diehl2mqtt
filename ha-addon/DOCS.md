@@ -2,6 +2,8 @@
 
 Requires Home Assistant OS on amd64 (for example your Proxmox HA VM) and a single supported RTL-SDR. arm64 is deferred. This is initially marked experimental until actual HA OS reception, reboot and USB reconnect have been verified.
 
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fandrekuehne%2Fdiehl2mqtt)
+
 1. Stop any previous reader, including its automatic startup/monitoring. For our LXC, run on the **Proxmox node**, replacing `CTID`:
 
    ```bash
@@ -11,7 +13,7 @@ Requires Home Assistant OS on amd64 (for example your Proxmox HA VM) and a singl
    ```
 
 2. In Proxmox, pass the RTL-SDR through to the **Home Assistant VM** (VM → Hardware → Add → USB Device). Remove the old reader's competing USB assignment as appropriate. The HA VM must actually see the device; VM USB reattachment after reconnect is handled by Proxmox.
-3. In Home Assistant's app/add-on store, open Repositories and add `https://github.com/andrekuehne/diehl2mqtt`.
+3. Click the button above, enter your local Home Assistant URL if prompted, and confirm **Add** in the prefilled repository dialog. Alternatively, open **Settings → Apps** (older versions: **Add-ons**) → **App/Add-on store → ⋮ → Repositories** and add `https://github.com/andrekuehne/diehl2mqtt` manually.
 4. Install **Diehl Hydrus to MQTT**. Open **Configuration**, enter your own meter ID and AES key, configure MQTT, and save.
 5. Start the add-on. Enable **Start on boot** and **Watchdog**. Check **Log**, then the MQTT device and a fresh **Last received** timestamp.
 

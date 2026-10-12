@@ -4,15 +4,23 @@ Read one Diehl HYDRUS 2.0 / DME173 through an RTL-SDR, decrypt Wireless M-Bus C1
 
 ## Install as a Home Assistant add-on (amd64)
 
-On **Home Assistant OS**, pass the RTL-SDR through to the HA VM, then add this repository URL in the app/add-on store's **Repositories** menu:
+Requires **Home Assistant OS on amd64** and a supported RTL-SDR. For a Proxmox HA VM, pass the dongle through under **VM → Hardware → Add → USB Device**. Stop any previous Docker/LXC reader and its automatic monitoring before moving the dongle; see the [migration commands](ha-addon/DOCS.md#installation).
+
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fandrekuehne%2Fdiehl2mqtt)
+
+1. Click the button above. My Home Assistant opens your local instance with this repository URL prefilled. If prompted, enter your Home Assistant URL, then confirm **Add** in Home Assistant.
+2. In the app/add-on store, find **Diehl Hydrus to MQTT** and select **Install**. Refresh the store if it does not appear immediately.
+3. Open **Configuration**. Enter your own **eight-digit meter ID** (preserve leading zeros) and **32-hex-character AES key**. All settings, passwords and keys are entered here; no terminal secret setup is needed.
+4. For a running Supervisor MQTT service such as Mosquitto, keep `mqtt_auto: true`. For another broker, disable it and enter the hostname, port, username/password and TLS settings. Keep the existing topic prefixes when migrating.
+5. Save, then **Start**. Enable **Start on boot** and **Watchdog**. Check **Log** and confirm a fresh **Last received** timestamp on the MQTT device in Home Assistant.
+
+Manual alternative: open **Settings → Apps** (called **Add-ons** in older versions) → **App/Add-on store → ⋮ → Repositories**, paste the URL below and select **Add**, then continue at step 2:
 
 ```text
 https://github.com/andrekuehne/diehl2mqtt
 ```
 
-Install **Diehl Hydrus to MQTT**, open its **Configuration** tab, enter your own eight-digit meter ID and 32-hex-character AES key, then save and start it. All broker settings, passwords, TLS certificate/key text and MQTT/discovery options are configured in that tab too. Automatic MQTT uses Supervisor's registered MQTT service; disable it to supply a manual broker. Enable Start on boot and Watchdog. Update through Home Assistant's normal add-on update button.
-
-Stop the previous reader and its automatic monitoring **before** moving the dongle. The add-on keeps the same MQTT paths, device identity and all ten sensor entity IDs. Keep the same broker, meter ID and topic settings to reuse existing entities. No terminal secret setup is needed. See the [add-on documentation](ha-addon/DOCS.md) for migration commands, full configuration and troubleshooting. This first version is experimental pending actual HA OS USB/reboot validation; arm64 remains deferred.
+Update through Home Assistant's normal app/add-on update button. The add-on keeps the same MQTT paths, device identity and all ten sensor entity IDs. Keep the same broker, meter ID and topic settings to reuse existing entities. See the [add-on documentation](ha-addon/DOCS.md) for full configuration, CPU tuning and troubleshooting. The add-on is experimental pending actual HA OS USB/reboot validation; arm64 remains deferred.
 
 ## Install on Proxmox VE 9.1+ (no Docker)
 
