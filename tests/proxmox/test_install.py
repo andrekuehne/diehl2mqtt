@@ -36,6 +36,44 @@ class InstallerTests(unittest.TestCase):
             return subprocess.CompletedProcess(args, code, output, "")
         return run, calls
 
+    def test_resource_limits_and_creation_options(self):
+        for validator, invalid in ((app.memory_value, ('0', '255', '65537', 'bad')),
+                                   (app.disk_value, ('0', '1', '1025', 'bad'))):
+            for value in invalid:
+                with self.assertRaises(ValueError):
+                    validator(value)
+        settings = dict(ctid=123, hostname='reader', storage='local-lvm',
+                        bridge='vmbr0', address='dhcp', gateway='', vlan='',
+                        marker='d2m-test', memory=1024, disk=8)
+        command = app.create_command(settings, '/tmp/image.tar')
+        self.assertEqual(command[command.index('--memory') + 1], '1024')
+        self.assertEqual(command[command.index('--rootfs') + 1], 'local-lvm:8')
+
+    def test_bootstrap_keeps_recovery_separate_and_secrets_untouched(self):
+        for name in ('opt/watermeter/watermeter', 'opt/venv/bin', 'usr/share/watermeter',
+                     'usr/local/bin', 'etc/diehl2mqtt/secrets'):
+            (self.root / name).mkdir(parents=True, exist_ok=True)
+        for filename in ('__init__.py', 'lxc.py', 'update.py', 'health.py'):
+            (self.root / 'opt/watermeter/watermeter' / filename).write_text('# test')
+        for filename in ('wmbusmeters', 'rtl_wmbus', 'entrypoint.sh', 'healthcheck.sh', 'update'):
+            (self.root / 'usr/local/bin' / filename).write_text('test')
+        secret = self.root / 'etc/diehl2mqtt/secrets/meter_aes_key'
+        secret.write_text('synthetic-only')
+        secret.chmod(0o600)
+        with patch.object(app.os, 'chown'):
+            app.bootstrap_updates(self.root, 'v0.4.0', 'test-image', (100000, 100000))
+        base = self.root / 'opt/diehl2mqtt'
+        self.assertEqual(os.readlink(base / 'current'), 'releases/v0.4.0-initial')
+        self.assertTrue((base / 'launcher/watermeter/lxc.py').is_file())
+        self.assertTrue((base / 'releases/v0.4.0-initial/watermeter/watermeter/lxc.py').is_file())
+        self.assertEqual(secret.read_text(), 'synthetic-only')
+        self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
+        config = self.root / 'etc/diehl2mqtt/install.json'
+        self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(json.loads(config.read_text())['kind'], 'diehl2mqtt-lxc')
+        with self.assertRaises(app.InstallError):
+            app.bootstrap_updates(self.root, 'v0.4.0', 'test-image', (100000, 100000))
+
     def test_existing_vm_id_is_refused_cluster_wide(self):
         with patch.object(app, "command_json", return_value=[{"vmid": 123, "type": "qemu", "node": "other"}]):
             with self.assertRaises(app.InstallError):
@@ -77,10 +115,17 @@ class InstallerTests(unittest.TestCase):
     def test_image_environment_kept_and_overrides_not_duplicated(self):
         old = "lxc.environment.runtime: PATH=/opt/venv/bin:/usr/bin\n" \
               "lxc.environment.runtime: METER_ID=12345678\n" \
+              "lxc.environment.runtime: WMBUS_FAST_MATH=false\n" \
+              "lxc.environment.runtime: WMBUS_ALGORITHM=both\n" \
               "lxc.environment.runtime: PYTHONPATH=/opt/watermeter\n"
-        result = app.configure_text(old, {"METER_ID": "00123456", "METER_AES_KEY_FILE": "/etc/diehl2mqtt/secrets/meter_aes_key"})
+        result = app.configure_text(old, {"METER_ID": "00123456", "METER_AES_KEY_FILE": "/etc/diehl2mqtt/secrets/meter_aes_key",
+                                          "WMBUS_FAST_MATH": "true", "WMBUS_ALGORITHM": "time2"})
         self.assertEqual(result.count("METER_ID="), 1)
         self.assertIn("METER_ID=00123456", result)
+        self.assertEqual(result.count("WMBUS_FAST_MATH="), 1)
+        self.assertEqual(result.count("WMBUS_ALGORITHM="), 1)
+        self.assertIn("WMBUS_FAST_MATH=true", result)
+        self.assertIn("WMBUS_ALGORITHM=time2", result)
         self.assertIn("PATH=/opt/venv/bin:/usr/bin", result)
         self.assertIn("tmpfs run/watermeter tmpfs nosuid,nodev,mode=0700,create=dir", result)
         self.assertNotIn("METER_AES_KEY=", result)

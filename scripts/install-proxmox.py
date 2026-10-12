@@ -23,7 +23,8 @@ import time
 import urllib.request
 import uuid
 
-DEFAULT_RELEASE = "v0.3.1"
+DEFAULT_RELEASE = "v0.7.0"
+UI = False
 REPOSITORY = "https://github.com/andrekuehne/diehl2mqtt"
 PVE_CONFIG = Path("/etc/pve/lxc")
 CONFIG_DIR = Path("/etc/diehl2mqtt-lxc")
@@ -71,11 +72,68 @@ def ctid_value(value):
     return value
 
 
+def dialog(kind, label, default="", choices=None):
+    command = ["whiptail", "--title", "Diehl HYDRUS · diehl2mqtt",
+               "--backtitle", "diehl2mqtt | Proxmox VE | Unprivileged LXC",
+               "--output-fd", "2"]
+    if kind == "menu":
+        command += ["--default-item", default, "--menu", label, "20", "76", "10"]
+        for key, description in choices:
+            command += [key, description]
+    elif kind == "yesno":
+        command += ["--defaultno", "--scrolltext", "--yesno", label, "20", "76"]
+    else:
+        command += ["--" + kind, label, "10", "76"]
+        if kind == "inputbox":
+            command.append(default)
+    # Choices/passwords use a private pipe; the dialog screen stays on the terminal.
+    result = subprocess.run(command, stdout=sys.stderr, stderr=subprocess.PIPE, text=True)
+    if kind == "yesno" and result.returncode in (0, 1):
+        return result.returncode == 0
+    if result.returncode in (1, 255):
+        raise KeyboardInterrupt
+    if result.returncode:
+        raise InstallError("Terminal dialog failed; retry with --plain")
+    return result.stderr.rstrip("\n")
+
+
+def status(message, kind="info"):
+    symbols = {"info": "i", "ok": "✓", "warn": "!", "error": "✗"}
+    colors = {"info": "36", "ok": "32", "warn": "33", "error": "31"}
+    stream = sys.stderr if kind == "error" else sys.stdout
+    prefix = f"  {symbols[kind]} "
+    if stream.isatty() and os.environ.get("TERM") != "dumb" and "NO_COLOR" not in os.environ:
+        prefix = f"\033[{colors[kind]}m{prefix}\033[0m"
+    print(prefix + message, file=stream, flush=True)
+
+
+def choose(label, default, choices):
+    if UI:
+        return dialog("menu", label, default, choices)
+    return prompt(label + " (" + ", ".join(key for key, _ in choices) + ")", default,
+                  "|".join(re.escape(key) for key, _ in choices))
+
+
+def secret(label):
+    return dialog("passwordbox", label) if UI else getpass.getpass(label + ": ")
+
+
+def confirm(label):
+    return dialog("yesno", label) if UI else input(label + " [y/N]: ").strip().lower() == "y"
+
+
 def prompt(label, default="", pattern=None):
-    value = input(f"{label}" + (f" [{default}]" if default else "") + ": ").strip() or default
-    if pattern:
-        valid(value, pattern, label)
-    return value
+    while True:
+        value = (dialog("inputbox", label, default) if UI else
+                 input(f"{label}" + (f" [{default}]" if default else "") + ": ")).strip() or default
+        try:
+            if pattern:
+                valid(value, pattern, label)
+            return value
+        except InstallError:
+            if not UI:
+                raise
+            dialog("msgbox", "Invalid entry. Please check: " + label)
 
 
 def device(port):
@@ -134,7 +192,7 @@ def preflight():
         raise InstallError("Direct OCI application containers require Proxmox VE 9.1+")
     if "entrypoint" not in run("pct", "help", "create").stdout:
         raise InstallError("Update pve-container: OCI application entrypoint support is missing")
-    print(version.strip())
+    status(version.strip(), "ok")
 
 
 def check_unused(ctid):
@@ -176,13 +234,32 @@ def release_image(version):
                  r"ghcr\.io/andrekuehne/diehl2mqtt@sha256:[0-9a-f]{64}", "release image")
 
 
+def memory_value(value):
+    number = int(value)
+    if not 256 <= number <= 65536:
+        raise ValueError("RAM must be 256-65536 MiB")
+    return number
+
+
+def disk_value(value):
+    number = int(value)
+    if not 2 <= number <= 1024:
+        raise ValueError("Root disk must be 2-1024 GiB")
+    return number
+
+
 def collect_settings(args):
     if not sys.stdin.isatty():
         raise InstallError("Use an interactive terminal; do not pipe the script into Python")
+    defaults = UI and choose("Choose container settings. Your meter ID and secrets are always requested.",
+                            "default", [("default", "Default: 1 CPU, 512 MiB RAM, 2 GiB disk, DHCP on vmbr0"),
+                                        ("advanced", "Advanced: customize CT, resources and networking")]) == "default"
     next_id = str(command_json("pvesh", "get", "/cluster/nextid", "--output-format", "json"))
-    ctid = ctid_value(args.ctid or prompt("New CT ID", next_id, r"\d+"))
+    ctid = ctid_value(args.ctid or (next_id if defaults else prompt("New CT ID", next_id, r"\d+")))
     check_unused(ctid)
-    hostname = prompt("CT hostname", "diehl2mqtt", r"[a-zA-Z0-9][a-zA-Z0-9.-]{0,62}")
+    hostname = "diehl2mqtt" if defaults else prompt("CT hostname", "diehl2mqtt", r"[a-zA-Z0-9][a-zA-Z0-9.-]{0,62}")
+    memory = memory_value(args.memory or (512 if defaults else prompt("RAM in MiB", "512", r"[0-9]+")))
+    disk = disk_value(args.disk or (2 if defaults else prompt("Root disk in GiB", "2", r"[0-9]+")))
     node = socket.gethostname().split(".")[0]
     valid(node, r"[a-zA-Z0-9][a-zA-Z0-9_-]*", "node name")
     stores = command_json("pvesh", "get", f"/nodes/{node}/storage", "--content", "rootdir",
@@ -191,17 +268,17 @@ def collect_settings(args):
     if not available:
         raise InstallError("No active storage supports container root disks")
     print("Root disk storage: " + ", ".join(available))
-    storage = prompt("Root disk storage", "local-lvm" if "local-lvm" in available else available[0],
-                     r"[a-zA-Z0-9][a-zA-Z0-9_-]*")
+    storage = choose("Root disk storage", "local-lvm" if "local-lvm" in available else available[0],
+                     [(name, "Active container storage") for name in available])
     if storage not in available:
         raise InstallError("Select active container-root storage from the list")
-    bridge = prompt("Network bridge", "vmbr0", r"[a-zA-Z0-9_.-]{1,15}")
+    bridge = "vmbr0" if defaults else prompt("Network bridge", "vmbr0", r"[a-zA-Z0-9_.-]{1,15}")
     if not (Path("/sys/class/net") / bridge / "bridge").exists():
         raise InstallError("The selected bridge does not exist on this node")
-    vlan = prompt("VLAN tag (empty for untagged)")
+    vlan = "" if defaults else prompt("VLAN tag (empty for untagged)")
     if vlan and (not vlan.isdecimal() or not 1 <= int(vlan) <= 4094):
         raise InstallError("VLAN must be 1-4094")
-    address = prompt("IPv4: dhcp or address/prefix", "dhcp")
+    address = "dhcp" if defaults else prompt("IPv4: dhcp or address/prefix", "dhcp")
     gateway = ""
     if address != "dhcp":
         if ipaddress.ip_interface(address).version != 4 or "/" not in address:
@@ -213,13 +290,21 @@ def collect_settings(args):
     check_exclusive(usb)
     env = {"METER_ID": prompt("Eight-digit Wireless M-Bus meter ID", pattern=r"[0-9]{8}"),
            "METER_AES_KEY_FILE": "/etc/diehl2mqtt/secrets/meter_aes_key"}
-    mode = prompt("MQTT mode: auth, anonymous, or off", "auth", r"auth|anonymous|off")
+    env["WMBUS_FAST_MATH"] = args.fast_math or ("false" if defaults else choose(
+        "Fast demodulator math? Approximate atan reduces CPU; compare reception before keeping it enabled.",
+        "false", [("false", "Accurate math (default)"), ("true", "Fast approximate math")]))
+    env["WMBUS_ALGORITHM"] = args.algorithm or ("both" if defaults else choose(
+        "Demodulator algorithms. Both favors reception diversity; a single algorithm reduces CPU.",
+        "both", [("both", "Both algorithms (default)"), ("runlength", "Runlength only"),
+                 ("time2", "Time2 only")]))
+    mode = choose("MQTT connection", "auth", [("auth", "Username and password"),
+                                               ("anonymous", "No authentication"), ("off", "Disable MQTT")])
     env["MQTT_ENABLED"] = "false" if mode == "off" else "true"
     if mode != "off":
         env["MQTT_HOST"] = prompt("MQTT hostname/IP (no scheme/port)", pattern=r"[a-zA-Z0-9_.:-]+")
         if ":" in env["MQTT_HOST"]:
             ipaddress.IPv6Address(env["MQTT_HOST"])
-        env["MQTT_TLS"] = prompt("MQTT TLS: true or false", "false", r"true|false")
+        env["MQTT_TLS"] = choose("Use TLS for MQTT?", "false", [("false", "No TLS"), ("true", "Verified TLS")])
         port = int(prompt("MQTT port", "8883" if env["MQTT_TLS"] == "true" else "1883", r"[0-9]+"))
         if not 1 <= port <= 65535:
             raise InstallError("MQTT port must be 1-65535")
@@ -228,6 +313,7 @@ def collect_settings(args):
         env["MQTT_USERNAME"] = prompt("MQTT username", pattern=r"[^\x00-\x20\x7f]+")
         env["MQTT_PASSWORD_FILE"] = "/etc/diehl2mqtt/secrets/mqtt_password"
     return {"ctid": ctid, "hostname": hostname, "storage": storage, "bridge": bridge,
+            "memory": memory, "disk": disk,
             "vlan": vlan, "address": address, "gateway": gateway, "usb": usb, "env": env,
             "release": args.release, "image": release_image(args.release),
             "marker": "d2m-" + uuid.uuid4().hex[:12]}
@@ -241,7 +327,8 @@ def create_command(settings, archive):
     if settings["vlan"]:
         network += f",tag={settings['vlan']}"
     return ["pct", "create", str(settings["ctid"]), str(archive), "--hostname", settings["hostname"],
-            "--rootfs", settings["storage"] + ":2", "--cores", "1", "--memory", "512",
+            "--rootfs", settings["storage"] + ":" + str(settings.get("disk", 2)),
+            "--cores", "1", "--memory", str(settings.get("memory", 512)),
             "--swap", "0", "--unprivileged", "1", "--net0", network, "--onboot", "0",
             "--tags", "diehl2mqtt;" + settings["marker"], "--start", "0"]
 
@@ -383,30 +470,84 @@ def install_units():
     run("systemctl", "daemon-reload")
 
 
+def bootstrap_updates(rootfs, release, image, owner):
+    """Prepare the new stopped guest; existing guests are never migrated implicitly."""
+    base = rootfs / "opt/diehl2mqtt"
+    if base.exists() or base.is_symlink():
+        raise InstallError("The new image already has a managed application tree")
+    valid(release, r"v[0-9]+\.[0-9]+\.[0-9]+", "release")
+    name = release + "-initial"
+    target = base / "releases" / name
+    target.mkdir(parents=True, mode=0o700)
+    # Keep the recovery launcher independent of application updates.
+    launcher = base / "launcher/watermeter"
+    launcher.mkdir(parents=True)
+    for filename in ("__init__.py", "lxc.py", "update.py", "health.py"):
+        source = rootfs / "opt/watermeter/watermeter" / filename
+        if source.is_symlink() or not source.is_file():
+            raise InstallError("Selected release does not support native LXC updates; use v0.4.0 or newer")
+        shutil.copyfile(source, launcher / filename)
+    for source, destination in (("opt/watermeter", "watermeter"), ("opt/venv", "venv"),
+                                ("usr/share/watermeter", "provenance")):
+        path = rootfs / source
+        if path.is_symlink() or not path.is_dir():
+            raise InstallError("Unexpected application image layout")
+        shutil.move(str(path), target / destination)
+        path.symlink_to("/opt/diehl2mqtt/current/" + destination)
+        os.chown(path, *owner, follow_symlinks=False)
+    (target / "bin").mkdir()
+    for filename in ("wmbusmeters", "rtl_wmbus", "entrypoint.sh", "healthcheck.sh", "update"):
+        path = rootfs / "usr/local/bin" / filename
+        if path.is_symlink() or not path.is_file():
+            raise InstallError("Unexpected native binary layout")
+        path.rename(target / "bin" / filename)
+        path.symlink_to("/opt/diehl2mqtt/current/bin/" + filename)
+        os.chown(path, *owner, follow_symlinks=False)
+    (base / "current").symlink_to("releases/" + name)
+    metadata = {"format": 1, "version": release, "image": image}
+    (target / "bundle.json").write_text(json.dumps(metadata))
+    for path in [base, *base.rglob("*")]:
+        os.chown(path, *owner, follow_symlinks=False)
+    config = rootfs / "etc/diehl2mqtt/install.json"
+    if config.exists() or config.is_symlink():
+        raise InstallError("Refusing to overwrite guest update configuration")
+    config.write_text(json.dumps(dict(metadata, kind="diehl2mqtt-lxc", release=release)))
+    config.chmod(0o600)
+    os.chown(config, *owner)
+
+
 def show_plan(settings):
     print(f"\nCreate unprivileged CT {settings['ctid']}: {settings['hostname']}")
-    print(f"1 core, 512 MiB RAM, 2 GiB disk on {settings['storage']}")
+    print(f"1 core, {settings.get('memory', 512)} MiB RAM, {settings.get('disk', 2)} GiB disk on {settings['storage']}")
     print(f"Network: {settings['bridge']}, IPv4 {settings['address']}; USB port {settings['usb']['port']}")
     print(f"Release {settings['release']}, pinned image {settings['image']}")
+    print(f"Demodulator: algorithm={settings['env'].get('WMBUS_ALGORITHM', 'both')}, "
+          f"fast_math={settings['env'].get('WMBUS_FAST_MATH', 'false')}")
     print("Install skopeo if needed. Detach only this SDR's DVB driver if active.")
     print("A host timer starts the CT at boot, checks health, and handles USB reconnects.")
 
 
 def execute_install(settings):
     ctid = settings["ctid"]
-    if input("Create this new CT? [y/N]: ").strip().lower() != "y":
+    if not confirm(f"Create unprivileged CT {ctid}: {settings['hostname']}?\n\n"
+                   f"RAM: {settings.get('memory', 512)} MiB\nDisk: {settings.get('disk', 2)} GiB on {settings['storage']}\n"
+                   f"Network: {settings['bridge']}, {settings['address']}\nUSB port: {settings['usb']['port']}\n"
+                   f"Demodulator: {settings['env'].get('WMBUS_ALGORITHM', 'both')}, "
+                   f"fast math {settings['env'].get('WMBUS_FAST_MATH', 'false')}\n"
+                   f"Release: {settings['release']}\n\nOnly this new CT will be configured."):
         return
-    aes = getpass.getpass("Meter AES key (32 hex characters): ")
+    aes = secret("Meter AES key (32 hex characters)")
     valid(aes, r"[0-9a-fA-F]{32}", "AES key: expected exactly 32 hexadecimal characters")
     password = ""
     if "MQTT_PASSWORD_FILE" in settings["env"]:
-        password = getpass.getpass("MQTT password: ")
+        password = secret("MQTT password")
         valid(password, r"[^\x00-\x1f\x7f]+", "MQTT password")
     check_unused(ctid)
     check_exclusive(settings["usb"])
     if not same_device(settings["usb"], device(settings["usb"]["port"])):
         raise InstallError("The selected SDR changed; run setup again")
     if not shutil.which("skopeo"):
+        status("Installing OCI image importer")
         run("apt-get", "update", timeout=300)
         run("apt-get", "install", "-y", "--no-install-recommends", "skopeo", timeout=600)
     created = False
@@ -416,9 +557,11 @@ def execute_install(settings):
             # Public archive must be readable by Proxmox's extraction user namespace.
             Path(temp).chmod(0o755)
             archive = Path(temp) / "image.tar"
+            status("Downloading the pinned application image")
             run("skopeo", "copy", "--override-os", "linux", "--override-arch", "amd64",
                 "docker://" + settings["image"], "oci-archive:" + str(archive), timeout=1200)
             archive.chmod(0o644)
+            status(f"Creating unprivileged CT {ctid}")
             run(*create_command(settings, archive), timeout=600)
             created = True
         path = PVE_CONFIG / f"{ctid}.conf"
@@ -428,10 +571,12 @@ def execute_install(settings):
         run("pct", "mount", ctid)
         mounted = True
         rootfs = Path(f"/var/lib/lxc/{ctid}/rootfs")
+        status("Configuring protected secrets and native application updates")
         write_secret(rootfs, "meter_aes_key", aes, owner)
         if password:
             write_secret(rootfs, "mqtt_password", password, owner)
         aes = password = ""
+        bootstrap_updates(rootfs, settings["release"], settings["image"], owner)
         run("pct", "unmount", ctid)
         mounted = False
         CONFIG_DIR.mkdir(mode=0o700, exist_ok=True)
@@ -439,9 +584,10 @@ def execute_install(settings):
         saved = {k: settings[k] for k in ("ctid", "usb", "marker", "image", "release")}
         (CONFIG_DIR / f"{ctid}.json").write_text(json.dumps(saved, indent=2) + "\n")
         install_units()
+        status("Starting the reader and USB monitor")
         manage(ctid)
         run("systemctl", "enable", "--now", f"diehl2mqtt-lxc@{ctid}.timer")
-        print(f"\nCT {ctid} installed. Health and real reception still need checking:")
+        status(f"CT {ctid} installed. Health and real reception still need checking:", "ok")
         print("  " + " ".join(health_command(ctid)))
         print(f"  pct console {ctid}    # Ctrl-A, Q to detach")
         print(f"Stop monitoring before intentionally stopping/removing this CT:")
@@ -462,12 +608,20 @@ def execute_install(settings):
 
 
 def main():
+    global UI
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", default=DEFAULT_RELEASE)
     parser.add_argument("--ctid", type=ctid_value)
+    parser.add_argument("--memory", type=memory_value, help="RAM in MiB (interactive default: 512)")
+    parser.add_argument("--disk", type=disk_value, help="Root disk in GiB (interactive default: 2)")
+    parser.add_argument("--fast-math", choices=("false", "true"), help="Approximate demodulator math (default: false)")
+    parser.add_argument("--algorithm", choices=("both", "runlength", "time2"), help="Demodulator algorithms (default: both)")
     parser.add_argument("--dry-run", action="store_true", help="Prompt/validate and show plan; make no changes")
     parser.add_argument("--check", action="store_true", help="Check PVE version and connected SDRs only")
+    interface = parser.add_mutually_exclusive_group()
+    interface.add_argument("--ui", action="store_true", help="Use community-style terminal dialogs when available")
+    interface.add_argument("--plain", action="store_true", help="Use plain terminal prompts")
     parser.add_argument("--manage", type=ctid_value, help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
@@ -477,6 +631,12 @@ def main():
             manage(args.manage)
             return
         preflight()
+        if args.ui and not args.check:
+            UI = bool(shutil.which("whiptail") and sys.stdin.isatty() and sys.stderr.isatty()
+                      and os.environ.get("TERM", "dumb") != "dumb")
+            if not UI:
+                status("Dialog UI unavailable; using plain terminal prompts", "warn")
+        status("Diehl HYDRUS · diehl2mqtt LXC setup")
         if args.check:
             for p in sorted(USB_SYSFS.iterdir()):
                 if re.fullmatch(r"\d+-\d+(?:\.\d+)*", p.name):
@@ -489,7 +649,7 @@ def main():
         if not args.dry_run:
             execute_install(settings)
     except (InstallError, OSError, ValueError, subprocess.SubprocessError) as error:
-        print(f"Setup stopped: {error}", file=sys.stderr)
+        status(f"Setup stopped: {error}", "error")
         sys.exit(1)
     except (KeyboardInterrupt, EOFError):
         print("\nSetup interrupted", file=sys.stderr)

@@ -21,10 +21,11 @@ SENSORS = (
 def messages(settings):
     device_id = f"diehl_hydrus_{settings.meter_id}"
     device = {"identifiers": [device_id], "manufacturer": "Diehl Metering",
-              "model": "HYDRUS 2.0 / DME173", "name": settings.name}
+              "model": "HYDRUS 2.0 / DME173",
+              "name": f"Diehl Hydrus 2.0 ID {settings.meter_id}"}
     for field, name, extra in SENSORS:
         unique_id = f"{device_id}_{field}"
-        payload = {"name": f"{name} {settings.meter_id}", "unique_id": unique_id,
+        payload = {"name": name, "unique_id": unique_id,
                    "default_entity_id": f"sensor.{unique_id}",
                    "state_topic": settings.state_topic,
                    "value_template": "{{ value_json.get('" + field + "') }}",

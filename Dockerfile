@@ -45,10 +45,11 @@ COPY --from=build /provenance /usr/share/watermeter
 RUN dpkg-query -W > /usr/share/watermeter/packages.txt
 COPY src/ /opt/watermeter/
 COPY scripts/entrypoint.sh scripts/healthcheck.sh scripts/smoke-image.sh /usr/local/bin/
+COPY --chmod=755 scripts/update.sh /usr/local/bin/update
 COPY tests/fixtures/dme173_12345678.hex /usr/share/watermeter/fixture.hex
 ENV PATH="/opt/venv/bin:${PATH}" PYTHONPATH=/opt/watermeter PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 METER_ID=12345678 METER_DRIVER=dme173 METER_NAME=Water \
-    WMBUS_FREQUENCY=868.95M WMBUS_MODE=c1 MQTT_ENABLED=false
+    WMBUS_FREQUENCY=868.95M WMBUS_MODE=c1 WMBUS_FAST_MATH=false WMBUS_ALGORITHM=both MQTT_ENABLED=false
 RUN smoke-image.sh
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["healthcheck.sh"]
@@ -59,10 +60,22 @@ FROM runtime AS test
 RUN apt-get update && apt-get install -y --no-install-recommends mosquitto mosquitto-clients openssl \
     && rm -rf /var/lib/apt/lists/*
 COPY tests/ /tests/
+COPY scripts/package-app.py /tests/package-app.py
 WORKDIR /
 ENV WATERMETER_TEST_MQTT=1
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
+
+# Home Assistant manages options, USB mapping, updates and the health watchdog.
+FROM runtime AS ha-addon
+ARG HA_ADDON_VERSION=0.7.0
+LABEL io.hass.version="${HA_ADDON_VERSION}" \
+      io.hass.type="addon" \
+      io.hass.arch="amd64" \
+      org.opencontainers.image.source="https://github.com/andrekuehne/diehl2mqtt"
+ENTRYPOINT ["/usr/bin/tini", "-g", "--", "python", "-m", "watermeter.addon"]
+CMD []
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 CMD ["python", "-c", "from watermeter.health import healthy; from pathlib import Path; raise SystemExit(0 if healthy(Path('/tmp/watermeter')) else 1)"]
 
 # Keep the default build target as the broker-free production image.
 FROM runtime AS final
