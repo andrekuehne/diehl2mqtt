@@ -5,6 +5,7 @@ secrets/
 __pycache__/
 *.py[cod]
 .venv/
+.cache/
 .pytest_cache/
 .runtime/
 test-output/

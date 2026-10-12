@@ -11,6 +11,7 @@ import urllib.request
 
 root = Path('/tmp/addon-smoke')
 root.mkdir(mode=0o700)
+os.chown(root, 10001, 0)
 # Supervisor/Docker tmpfs may be noexec; only data belongs under /tmp.
 bin_dir = Path('/opt/addon-smoke-bin')
 bin_dir.mkdir()
@@ -36,7 +37,7 @@ while True:
 for binary in ('rtl_sdr', 'rtl_wmbus', 'wmbusmeters'):
     path = bin_dir / binary
     path.write_text(helper)
-    path.chmod(0o700)
+    path.chmod(0o755)
 data = Path('/data')
 data.mkdir(exist_ok=True)
 (data / 'options.json').write_text(json.dumps(dict(
@@ -68,6 +69,15 @@ with out.open('w') as stdout, err.open('w') as stderr:
         reading = json.loads(out.read_text().splitlines()[-1])
         assert reading['id'] == '00123456' and reading['total_m3'] == 1.2
         assert reading['rssi_dbm'] == 133
+        state = json.loads(Path('/tmp/watermeter/health.json').read_text())
+        for process in state['processes']:
+            status = dict(line.split(':', 1) for line in Path(f"/proc/{process['pid']}/status").read_text().splitlines() if ':' in line)
+            assert set(status['Uid'].split()) == {'10001'}
+            assert set(status['Gid'].split()) == {'0'}
+            assert not status['Groups'].strip()
+            assert all(int(status[k].strip(), 16) == 0 for k in ('CapEff', 'CapPrm', 'CapInh', 'CapAmb', 'CapBnd'))
+            assert status['NoNewPrivs'].strip() == '1'
+        assert subprocess.run(['python', '-m', 'watermeter.privileges']).returncode == 0
         assert '/tmp/watermeter' in str(next(Path('/tmp/watermeter').glob('decoder-*')))
         child.send_signal(signal.SIGTERM)
         assert child.wait(timeout=12) == 0
@@ -75,7 +85,7 @@ with out.open('w') as stdout, err.open('w') as stderr:
         assert not Path('/tmp/watermeter/health.json').exists()
         assert '00112233445566778899aabbccddeeff' not in out.read_text() + err.read_text()
         assert 'synthetic-token' not in out.read_text() + err.read_text()
-        print('PASS: add-on options, tmpfs, child environment, USB recovery, quiet health and shutdown')
+        print('PASS: add-on options, non-root/capability-free processes, tmpfs, child environment, USB recovery, quiet health and shutdown')
     finally:
         if child.poll() is None:
             child.kill()

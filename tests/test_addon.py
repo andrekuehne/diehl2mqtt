@@ -128,6 +128,18 @@ class AddonTests(unittest.TestCase):
         path.write_text(json.dumps(self.options))
         self.assertEqual(addon.load_options(path), self.options)
 
+    def test_failed_privilege_drop_never_starts_receiver(self):
+        with patch.object(addon, 'ROOT', self.root), patch.object(addon, 'require_tmpfs'), \
+                patch.object(addon, 'load_options', return_value=self.options), \
+                patch.object(addon, 'drop_privileges', side_effect=ConfigError('Cannot safely drop app runtime privileges')), \
+                patch.object(addon, 'configuration') as configuration, \
+                patch.object(addon, 'receive') as receive:
+            # Unit tests run as root in CI, so prevent touching fixture ownership.
+            with patch.object(addon.os, 'chown'):
+                self.assertEqual(addon.main(), 2)
+            configuration.assert_not_called()
+            receive.assert_not_called()
+
     def test_watchdog_measures_process_health_not_rf_or_mqtt(self):
         import time
         processes = [dict(pid=os.getpid(), started=identity(os.getpid()))] * 4

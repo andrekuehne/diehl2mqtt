@@ -1,0 +1,71 @@
+#include <tunables/global>
+
+# Supervisor replaces this name with the installed repository-prefixed slug.
+profile diehl2mqtt flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # Bootstrap reads options, then drops to UID 10001 and clears all caps.
+  # Tini only needs kill to forward signals to its non-root child.
+  capability chown,
+  capability setuid,
+  capability setgid,
+  capability setpcap,
+  capability kill,
+
+  /usr/bin/tini rix,
+  /usr/bin/python3{,.11} rix,
+  /opt/venv/bin/python{,3,3.11} rix,
+  /usr/bin/rtl_sdr rix,
+  /usr/local/bin/rtl_wmbus rix,
+  /usr/local/bin/wmbusmeters rix,
+
+  /opt/venv/ r,
+  /opt/venv/** mr,
+  /opt/watermeter/ r,
+  /opt/watermeter/** r,
+  /usr/share/watermeter/ r,
+  /usr/share/watermeter/** r,
+  /usr/share/zoneinfo/** r,
+  /etc/{passwd,group,nsswitch.conf,hosts,host.conf,resolv.conf,gai.conf,services,protocols} r,
+  /etc/ssl/ r,
+  /etc/ssl/** r,
+  /usr/share/ca-certificates/** r,
+  /etc/python3{,.11}/** r,
+  /etc/libnl-3/** r,
+
+  # Persistent Configuration is read only; all generated secrets use tmpfs.
+  /data/ r,
+  /data/options.json r,
+  /tmp/ r,
+  owner /tmp/watermeter/ rw,
+  owner /tmp/watermeter/** rwk,
+
+  # Dynamic bus/device numbers preserve USB hotplug; no other /dev access.
+  /dev/bus/usb/ r,
+  /dev/bus/usb/** rw,
+  /run/udev/ r,
+  /run/udev/** r,
+  /sys/bus/usb/ r,
+  /sys/bus/usb/** r,
+  /sys/devices/ r,
+  /sys/devices/** r,
+  /sys/class/ r,
+  /sys/class/** r,
+  /sys/kernel/uevent_seqnum r,
+
+  # tmpfs checks, process identity/health and privilege verification.
+  @{PROC}/self/{mountinfo,status,stat} r,
+  @{PROC}/[0-9]*/{mountinfo,status,stat} r,
+  @{PROC}/sys/kernel/cap_last_cap r,
+  @{PROC}/sys/kernel/random/boot_id r,
+
+  # DNS, outbound MQTT/Supervisor HTTP and the private watchdog listener.
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network netlink raw,
+  network netlink dgram,
+  network unix stream,
+  network unix dgram,
+}

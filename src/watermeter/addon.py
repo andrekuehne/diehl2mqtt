@@ -10,6 +10,7 @@ import urllib.request
 
 from .health import healthy
 from .private import require_tmpfs
+from .privileges import APP_UID, APP_GID, drop_privileges
 from .settings import ConfigError, Settings, secret
 from .supervisor import log, run
 
@@ -181,9 +182,15 @@ def main():
         # Remove the token from the process environment before starting any child.
         token = os.environ.pop('SUPERVISOR_TOKEN', '')
         options = load_options()
+        # Read options while root. Every receiver
+        # process, certificate file and network-serving thread starts non-root.
+        if os.getuid() == 0:
+            os.chown(ROOT, APP_UID, APP_GID)
+        drop_privileges()
         settings, key, password = configuration(options, token)
         env = child_environment(os.environ)
         del options, token
+        log(f'App receiver running without root privileges (uid={os.getuid()}, gid={os.getgid()})')
         with health_server():
             return receive(settings, key, password, env)
     except ConfigError as exc:

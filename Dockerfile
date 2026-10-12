@@ -24,6 +24,9 @@ RUN mkdir -p /provenance/licenses \
     && printf 'base=%s\nrtl_wmbus_ref=%s\nrtl_wmbus_commit=%s\nwmbusmeters_ref=%s\nwmbusmeters_commit=%s\npaho_mqtt=2.1.0\n' \
         "$BASE_IMAGE" "$RTL_WMBUS_REF" "$(git -C rtl rev-parse HEAD)" \
         "$WMBUSMETERS_REF" "$(git -C meters rev-parse HEAD)" > /provenance/versions.txt
+# Installation tools are unnecessary in the runtime venv and have their own
+# vulnerability/attack surface. Keep only the hash-verified application deps.
+RUN /opt/venv/bin/pip uninstall -y setuptools pip
 
 FROM ${BASE_IMAGE} AS runtime
 ARG BASE_IMAGE
@@ -34,7 +37,7 @@ LABEL org.opencontainers.image.title="Diehl HYDRUS water meter reader" \
       org.opencontainers.image.base.name="${BASE_IMAGE}" \
       io.watermeter.rtl-wmbus.ref="${RTL_WMBUS_REF}" \
       io.watermeter.wmbusmeters.ref="${WMBUSMETERS_REF}"
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     rtl-sdr libstdc++6 libxml2 librtlsdr0 libusb-1.0-0 ca-certificates python3 tini \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/watermeter && chmod 700 /run/watermeter
@@ -57,7 +60,7 @@ ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/entrypoint.sh"]
 CMD ["live"]
 
 FROM runtime AS test
-RUN apt-get update && apt-get install -y --no-install-recommends mosquitto mosquitto-clients openssl \
+RUN apt-get update && apt-get install -y --no-install-recommends mosquitto mosquitto-clients openssl apparmor \
     && rm -rf /var/lib/apt/lists/*
 COPY tests/ /tests/
 COPY scripts/package-app.py /tests/package-app.py
@@ -68,14 +71,14 @@ CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
 
 # Home Assistant manages options, USB mapping, updates and the health watchdog.
 FROM runtime AS ha-addon
-ARG HA_ADDON_VERSION=0.7.2
+ARG HA_ADDON_VERSION=0.8.0
 LABEL io.hass.version="${HA_ADDON_VERSION}" \
       io.hass.type="addon" \
       io.hass.arch="amd64" \
       org.opencontainers.image.source="https://github.com/andrekuehne/diehl2mqtt"
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "python", "-m", "watermeter.addon"]
 CMD []
-HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 CMD ["python", "-c", "from watermeter.health import healthy; from pathlib import Path; raise SystemExit(0 if healthy(Path('/tmp/watermeter')) else 1)"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 CMD ["python", "-m", "watermeter.privileges"]
 
 # Keep the default build target as the broker-free production image.
 FROM runtime AS final

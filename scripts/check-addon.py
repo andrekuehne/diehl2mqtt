@@ -11,6 +11,9 @@ assert repository['name'] and repository['url'] == config['url']
 assert config['arch'] == ['amd64'] and config['usb'] and config['tmpfs']
 assert config['services'] == ['mqtt:want'] and not config.get('full_access', False)
 assert not config.get('hassio_api', False) and not config.get('host_network', False)
+assert config['stage'] == 'experimental'
+assert not config.get('privileged') and config.get('apparmor', True)
+assert (root / 'ha-addon/apparmor.txt').is_file()
 assert set(config['options']) == set(config['schema'])
 assert config['options']['meter_id'] is None and config['options']['aes_key'] is None
 assert config['schema']['aes_key'] == config['schema']['mqtt_password'] == 'password'

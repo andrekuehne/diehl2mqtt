@@ -9,6 +9,7 @@ secrets
 **/*.key
 **/__pycache__
 .venv
+.cache
 .runtime
 test-output
 

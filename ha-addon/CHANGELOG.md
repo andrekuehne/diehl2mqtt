@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0
+
+- Add an enforced AppArmor profile limiting executable access, filesystem writes and device access; protection mode stays enabled.
+- Run the receiver, decoder and health server as UID 10001, without Linux capabilities and with privilege escalation disabled. GID 0 preserves standard HAOS USB group-write access without changing host permissions.
+- Scan both published images for vulnerabilities and block publication on fixable HIGH/CRITICAL findings. Apply available Debian updates and remove pip/setuptools from runtime images.
+- Sign both image digests and release checksums with GitHub OIDC/Cosign, with signature verification in CI and documented verification commands.
+- Keep the app experimental while destination HAOS USB/reboot/update testing continues.
+
 ## 0.7.2
 
 - Run the shared SDR/decoder pipeline in UTC, fixing decoder timestamps shifted by the host/HA timezone. HA continues displaying timestamps in its configured local timezone.

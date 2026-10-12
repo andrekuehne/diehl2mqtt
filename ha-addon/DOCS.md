@@ -1,6 +1,6 @@
 # Installation
 
-Requires Home Assistant OS on amd64 (for example your Proxmox HA VM) and a single supported RTL-SDR. arm64 is deferred. This is initially marked experimental until actual HA OS reception, reboot and USB reconnect have been verified.
+Requires Home Assistant OS on amd64 (for example your Proxmox HA VM) and a single supported RTL-SDR. arm64 is deferred. The app remains experimental while destination reboot, update and hardening checks continue.
 
 [![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fandrekuehne%2Fdiehl2mqtt)
 
@@ -72,9 +72,9 @@ The receiver pipeline uses UTC from 0.7.2. **Decoder timestamp** marks radio rec
 
 # Updates and troubleshooting
 
-Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.7.2` is the add-on image tag; `v0.7.2` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
+Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.8.0` is the app image tag; `v0.8.0` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
 
-The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
+The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. From 0.8.0, a custom enforced AppArmor profile restricts executables, writes and device paths. After a brief root bootstrap reads Configuration, the receiver runs as UID 10001/GID 0 with no Linux capabilities and privilege escalation disabled. GID 0 preserves standard HAOS USB group-write access across reconnects; host USB ownership/permissions are not changed. The expected HA security rating is 8/8 once the profile is installed. See [security policy and release signature verification](../SECURITY.md). No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
 
 - **No SDR / permission / claimed driver:** check Proxmox VM passthrough and the add-on Log. Only one program may use the dongle. If the guest's DVB driver claims it, inspect the HA OS host driver binding; do not disable protection mode or add broad privileges as a first step.
 - **Receiver exits but HA OS lists the dongle:** `lsusb` proves enumeration, not that the add-on can open and stream from it. Version 0.7.1 reports specific libusb errors and process exit codes: component 1 is `rtl_sdr`, 2 is `rtl_wmbus`, and 3 is `wmbusmeters`. Access denied (`-3`), a busy device (`-6`) and a disconnected device (`-4`) need different fixes. Paste these classified messages when reporting failures; raw decoder errors remain suppressed because they may contain keys or telegrams.

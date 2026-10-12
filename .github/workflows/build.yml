@@ -82,6 +82,45 @@ jobs:
           python3 -m pip install PyYAML
           python3 scripts/check-addon.py
           docker run --rm --network none --tmpfs /tmp --entrypoint python --mount type=bind,src="$PWD/scripts/test-ha-addon.py",dst=/test-ha-addon.py,readonly watermeter:ha-addon /test-ha-addon.py
+      - name: Test enforced AppArmor and non-root runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends apparmor
+          python3 scripts/test-apparmor.py
+      - name: Prepare vulnerability reports
+        run: mkdir -p "$RUNNER_TEMP/security"
+      - name: Scan standalone image (all vulnerability severities)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: watermeter:local
+          scanners: vuln
+          format: json
+          output: ${{ runner.temp }}/security/standalone.json
+          exit-code: '0'
+          timeout: 10m
+      - name: Scan Home Assistant image (all vulnerability severities)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: watermeter:ha-addon
+          scanners: vuln
+          format: json
+          output: ${{ runner.temp }}/security/home-assistant.json
+          exit-code: '0'
+          skip-setup-trivy: true
+          timeout: 10m
+      - name: Block publication on fixable high or critical vulnerabilities
+        run: |
+          for image in watermeter:local watermeter:ha-addon; do
+            trivy image --cache-dir "$GITHUB_WORKSPACE/.cache/trivy" --image-src docker --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --timeout 10m "$image"
+          done
+      - name: Save vulnerability reports including unfixed findings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-vulnerability-reports
+          path: ${{ runner.temp }}/security/*.json
+          if-no-files-found: ignore
+          retention-days: 30
       - name: Verify OCI archive conversion for direct Proxmox LXC
         run: |
           sudo apt-get update -qq
@@ -118,6 +157,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -154,6 +194,7 @@ jobs:
           echo "reference=$digest" >> "$GITHUB_OUTPUT"
           echo "Published amd64 image: \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish exact tested Home Assistant image
+        id: addon_image
         env:
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -161,6 +202,9 @@ jobs:
           tag="ha-sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           docker tag watermeter:ha-addon "$image:$tag"
           docker push "$image:$tag"
+          digest=$(docker image inspect "$image:$tag" --format '{{index .RepoDigests 0}}')
+          [[ "$digest" == "$image@sha256:"* ]]
+          echo "reference=$digest" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             # The add-on uses plain semver; standalone Docker uses v-prefixed tags.
             tag="${GITHUB_REF_NAME#v}"
@@ -172,6 +216,19 @@ jobs:
             docker tag watermeter:ha-addon "$image:ha-latest"
             docker push "$image:ha-latest"
           fi
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22 # v4.1.0
+      - name: Sign and verify both exact image digests using GitHub OIDC
+        env:
+          IMAGE: ${{ steps.image.outputs.reference }}
+          ADDON_IMAGE: ${{ steps.addon_image.outputs.reference }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          identity="https://github.com/$REPOSITORY/.github/workflows/build.yml@$GITHUB_REF"
+          for image in "$IMAGE" "$ADDON_IMAGE"; do
+            cosign sign --yes "$image"
+            cosign verify --certificate-identity "$identity" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$image"
+          done
       - name: Package versioned deployment and native sources
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -188,6 +245,15 @@ jobs:
             exit 1
           fi
           METER_ID=00123456 MQTT_HOST=broker.invalid docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml config --format json | python3 -c 'import json,sys; s=json.load(sys.stdin)["services"]["watermeter"]; assert "build" not in s; assert s["environment"]["METER_ID"] == "00123456"; print("PASS: build-free deployment preserves leading zeros and requires a meter ID")'
+      - name: Sign and verify release checksums
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          checksums="$RUNNER_TEMP/release/SHA256SUMS"
+          identity="https://github.com/$REPOSITORY/.github/workflows/build.yml@$GITHUB_REF"
+          cosign sign-blob --yes --bundle "$checksums.sigstore.json" "$checksums"
+          cosign verify-blob --bundle "$checksums.sigstore.json" --certificate-identity "$identity" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$checksums"
       - name: Create versioned GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         env:

@@ -57,7 +57,7 @@ def main():
         deploy.mkdir()
         for name in ("compose.yaml", "compose.mqtt.yaml", "compose.mqtt.auth.yaml",
                      ".env.example", "scripts/setup-secret.sh", "scripts/setup-mqtt-secret.sh",
-                     "scripts/install-proxmox.py", "ct/diehl2mqtt.sh"):
+                     "scripts/install-proxmox.py", "ct/diehl2mqtt.sh", "SECURITY.md"):
             path = deploy / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(committed(name))

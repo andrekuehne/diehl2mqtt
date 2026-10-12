@@ -2,6 +2,8 @@
 
 Install Docker Engine with Compose, connect the RTL-SDR to this Linux host (or pass it through to your Linux VM), then extract this deployment archive. No source checkout or local image build is needed. arm64 is deferred.
 
+From v0.8.0, release checksums and image digests have Cosign signatures. See [security and signature verification](SECURITY.md) to authenticate the downloaded release materials before installing. Home Assistant app confinement is described there separately; this Docker deployment keeps its existing USB/runtime behavior.
+
 From this directory:
 
 ```bash
