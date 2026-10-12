@@ -100,3 +100,14 @@ class ReadingTests(unittest.TestCase):
         for raw in ("not json", "[]", "{}"):
             with self.assertRaises(InvalidReading):
                 accept(raw, Settings())
+
+
+class RuntimeStorageTests(unittest.TestCase):
+    def test_tmpfs_required(self):
+        from unittest.mock import patch
+        from watermeter.private import require_tmpfs
+        with patch.object(Path, "read_text", return_value="1 0 0:1 / / rw - overlay overlay rw\n"):
+            with self.assertRaises(ConfigError):
+                require_tmpfs()
+        with patch.object(Path, "read_text", return_value="1 0 0:1 / / rw - overlay overlay rw\n2 1 0:2 / /run/watermeter rw - tmpfs tmpfs rw\n"):
+            require_tmpfs()

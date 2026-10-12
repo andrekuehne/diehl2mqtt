@@ -32,7 +32,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_signals_silence_and_readings(self):
         for sig in (signal.SIGTERM, signal.SIGINT):
-            for mode in ("silence", "readings"):
+            for mode in ("silence", "readings", "descendants"):
                 with self.subTest(sig=sig, mode=mode), tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
                     process = self.launch(root, mode)
@@ -41,7 +41,8 @@ class LifecycleTests(unittest.TestCase):
                         time.sleep(0.02)
                     self.assertTrue(healthy(root))
                     # All children have installed their signal handlers before signaling.
-                    while len(list(root.glob("*.pid"))) != 3 and time.monotonic() < deadline:
+                    expected = 4 if mode == "descendants" else 3
+                    while len(list(root.glob("*.pid"))) != expected and time.monotonic() < deadline:
                         time.sleep(0.02)
                     time.sleep(0.2)
                     process.send_signal(sig)
@@ -55,6 +56,6 @@ class LifecycleTests(unittest.TestCase):
                         self.assertEqual(stdout, "")
                     for path in root.glob("*.signal"):
                         self.assertEqual(int(path.read_text()), sig)
-                    self.assertEqual(len(list(root.glob("*.signal"))), 3)
+                    self.assertEqual(len(list(root.glob("*.signal"))), expected)
                     self.no_children(root)
                     self.assertFalse(healthy(root))

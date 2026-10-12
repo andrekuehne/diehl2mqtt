@@ -18,4 +18,6 @@ def messages(settings):
                    "availability_topic": settings.availability_topic,
                    "payload_available": "online", "payload_not_available": "offline",
                    "qos": 1, "device": device, **extra}
+        if field == "status":
+            payload["value_template"] = "{{ value_json.get('status') if value_json.get('status') is not none else 'unknown' }}"
         yield f"{settings.discovery_prefix}/sensor/{unique_id}/config", encode(payload)

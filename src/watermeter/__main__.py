@@ -15,6 +15,8 @@ def main():
         print(Path("/usr/share/watermeter/versions.txt").read_text(), end="")
         return 0
     try:
+        from .private import require_tmpfs
+        require_tmpfs()
         settings = Settings.load(offline=args.mode == "offline")
         key = secret(os.environ, "METER_AES_KEY", required=True, aes=True)
         password = secret(os.environ, "MQTT_PASSWORD") if settings.mqtt else ""

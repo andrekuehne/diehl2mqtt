@@ -8,6 +8,8 @@ from .settings import ConfigError
 
 
 def decode(settings, key, env, fixture, root=Path("/run/watermeter")):
+    if settings.driver != "dme173":
+        raise ConfigError("Offline fixture requires METER_DRIVER=dme173")
     try:
         packet = Path(fixture).read_text(encoding="ascii").removesuffix("\n")
         if not re.fullmatch(r"(?:[0-9a-fA-F]{2}){10,256}", packet):

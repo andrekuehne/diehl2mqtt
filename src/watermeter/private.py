@@ -35,3 +35,20 @@ def private_config(settings, key, root=Path("/run/watermeter"), offline=False):
         yield directory
     finally:
         shutil.rmtree(directory)
+
+
+def require_tmpfs(root=Path("/run/watermeter")):
+    """Production must not accidentally persist generated keys to an image layer."""
+    resolved = root.resolve()
+    best = (0, "")
+    try:
+        for line in Path("/proc/self/mountinfo").read_text().splitlines():
+            before, after = line.split(" - ", 1)
+            mount = Path(before.split()[4].replace("\\040", " ").replace("\\134", "\\"))
+            if resolved == mount or mount in resolved.parents:
+                if len(str(mount)) > best[0]:
+                    best = (len(str(mount)), after.split()[0])
+    except (OSError, ValueError, IndexError):
+        raise ConfigError("Cannot verify private runtime tmpfs") from None
+    if best[1] != "tmpfs":
+        raise ConfigError("Mount /run/watermeter as tmpfs before providing runtime secrets")
