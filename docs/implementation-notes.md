@@ -4,7 +4,7 @@ Inspected upstream on 2026-10-12. Application sources are pinned to full commits
 
 - wmbusmeters 3.0.0: `ac4f295369a48ef51cb835e6920b62cbee743bd6` (GPL-3.0-or-later).
 - xaelsouth rtl-wmbus 1.1.0: `34684e655df70867ac86e799561ec6512c45be0a` (BSD-2-Clause notice in README).
-- Base: Debian bookworm-slim, glibc. Its mutable tag intentionally permits reviewed/security rebuilds; application sources stay fixed. Distro package updates mean builds are repeatable from pinned source, not byte-identical.
+- Base: Debian bookworm-slim, glibc, pinned digest `sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587`. Dependabot proposes reviewed Docker digest updates; the weekly job pulls the configured digest and disables application build cache. Distro package updates still mean builds are repeatable from pinned source, not byte-identical.
 - Python Paho MQTT 2.1.0, MQTT 3.1.1, callback API v2.
 
 Upstream references: [build/config/CLI](https://github.com/wmbusmeters/wmbusmeters/tree/3.0.0), [SDR implementation](https://github.com/wmbusmeters/wmbusmeters/blob/3.0.0/src/wmbus_rtlwmbus.cc), [rtl-wmbus build and options](https://github.com/xaelsouth/rtl-wmbus/tree/1.1.0), [Paho](https://eclipse.dev/paho/files/paho.mqtt.python/html/client.html), [HA sensors](https://www.home-assistant.io/integrations/sensor.mqtt/), [HA discovery](https://www.home-assistant.io/integrations/mqtt/), [water](https://www.home-assistant.io/docs/energy/water/).

@@ -1,4 +1,5 @@
 """Test only; never copied into the production image."""
+from dataclasses import replace
 import os
 from pathlib import Path
 import sys
@@ -12,6 +13,10 @@ commands = [[sys.executable, helper, role, mode, str(root)] for role in ("receiv
 if mode == "startup":
     commands[1] = ["/definitely/missing/watermeter-executable"]
 try:
-    raise SystemExit(Supervisor(Settings(), dict(os.environ), root, root, commands=commands).run())
+    publisher = None
+    if mode == "broker-outage":
+        from watermeter.mqtt import Publisher
+        publisher = Publisher(replace(Settings(), mqtt=True, discovery=True, host="127.0.0.1", port=9))
+    raise SystemExit(Supervisor(Settings(), dict(os.environ), root, root, publisher=publisher, commands=commands).run())
 except Exception:
     raise SystemExit(2)

@@ -28,8 +28,10 @@ if mode == role + "-exit":
 if role == "decoder" and mode == "eof":
     sys.stdout.close()
     os.close(1)
-if role == "decoder" and mode == "readings":
+if role == "decoder" and mode in ("readings", "broker-outage"):
     print("not json", flush=True)
     print(json.dumps({"_": "telegram", "meter": "dme173", "id": "12345678", "total_m3": 1.2}), flush=True)
+if role == "decoder" and mode == "oversized":
+    print("x" * 80000, end="", flush=True)
 while True:
     time.sleep(0.1)

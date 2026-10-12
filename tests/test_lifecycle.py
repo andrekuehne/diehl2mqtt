@@ -20,7 +20,7 @@ class LifecycleTests(unittest.TestCase):
             self.assertIsNone(identity(int(pid_file.read_text())))
 
     def test_component_failure_and_eof(self):
-        for mode in ("receiver-exit", "demod-exit", "decoder-exit", "eof", "startup"):
+        for mode in ("receiver-exit", "demod-exit", "decoder-exit", "eof", "startup", "oversized"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 process = self.launch(root, mode)
@@ -32,7 +32,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_signals_silence_and_readings(self):
         for sig in (signal.SIGTERM, signal.SIGINT):
-            for mode in ("silence", "readings", "descendants"):
+            for mode in ("silence", "readings", "descendants", "broker-outage"):
                 with self.subTest(sig=sig, mode=mode), tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
                     process = self.launch(root, mode)
@@ -48,7 +48,7 @@ class LifecycleTests(unittest.TestCase):
                     process.send_signal(sig)
                     stdout, stderr = process.communicate(timeout=8)
                     self.assertEqual(process.returncode, 0, stderr)
-                    if mode == "readings":
+                    if mode in ("readings", "broker-outage"):
                         reading = json.loads(stdout)
                         self.assertEqual(reading["total_m3"], 1.2)
                         self.assertEqual((root / "last_received_at").read_text().strip(), reading["received_at"])

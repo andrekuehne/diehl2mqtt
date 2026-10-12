@@ -24,3 +24,17 @@ class OfflineTests(unittest.TestCase):
             path.write_text("corrupt")
             with self.assertRaises(ConfigError):
                 decode(Settings(), secrets.token_hex(16), dict(os.environ), path, Path(tmp))
+
+    def test_timeout_and_no_key_in_argv_or_environment(self):
+        from unittest.mock import patch
+        import subprocess
+        key = secrets.token_hex(16)
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("watermeter.offline.subprocess.run", side_effect=subprocess.TimeoutExpired("decoder", 10)) as run:
+                with self.assertRaises(ConfigError):
+                    decode(Settings(), key, dict(os.environ), "tests/fixtures/dme173_12345678.hex", Path(tmp))
+                argv = run.call_args.args[0]
+                self.assertTrue(all(key not in part for part in argv))
+                self.assertEqual(run.call_args.kwargs["timeout"], 10)
+                self.assertNotIn("METER_AES_KEY", run.call_args.kwargs["env"])
+            self.assertEqual(list(Path(tmp).iterdir()), [])

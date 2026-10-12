@@ -33,3 +33,6 @@ Date: 2026-10-12. No AES key has been provided. No credentials searched.
 | WP08 unplug/replug stress | NOT RUN | Optional owner-assisted physical unplug/replug test was not performed; mandatory clean stop/restart is verified separately. |
 
 All recorded times above are UTC; Berlin is UTC+02:00 on this date. First live observations happened well within the 15-minute test cap; observed ~20-second spacing is not an expiry/health threshold.
+| WP09 workflow/update validation | PASS | Official action refs resolved to immutable SHA pins. actionlint 1.7.12 validates build.yml locally. Read-only update checker runs against public upstreams/PyPI/base manifest. PRs have read-only permissions/no publish/no runtime AES. Optional AES is only on trusted main non-PR runtime execution; no pull_request_target. Publication is explicit manual/main-only with isolated packages:write job. Weekly job pulls pinned base and disables build cache, and Dependabot proposes reviewed base/Action updates. |
+| WP09 hosted CI/GHCR | NOT RUN | No remote is configured; no hosted workflow or registry publication claimed. Local hardware-free image checks run the same test command. |
+| arm64 | NOT RUN | Initial supported/tested target is amd64 only. |

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-ARG BASE_IMAGE=debian:bookworm-slim
+ARG BASE_IMAGE=debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 FROM ${BASE_IMAGE} AS build
 ARG BASE_IMAGE
 ARG RTL_WMBUS_REF=34684e655df70867ac86e799561ec6512c45be0a
