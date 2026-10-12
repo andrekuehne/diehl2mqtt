@@ -12,7 +12,7 @@ Run this as root in the **Proxmox node shell**:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/ct/diehl2mqtt.sh)"
 ```
 
-This installs the current **v0.5.0** release. Connect the RTL-SDR to that Proxmox node first. Run the command on the node itself, not on your desktop or inside another guest.
+This installs the current **v0.5.1** release. Connect the RTL-SDR to that Proxmox node first. Run the command on the node itself, not on your desktop or inside another guest.
 
 The setup offers Default/Advanced settings, dialog inputs and hidden secret fields. Default allocation is **1 CPU, 512 MiB RAM and 2 GiB disk**, with DHCP on `vmbr0`. **256 MiB RAM is a reasonable smaller allocation** based on a simulated runtime/update-staging check (about 73 MiB running, 105 MiB peak); actual reception on your node still needs verification. Choose Advanced to set RAM to 256 MiB and customize disk/networking, or supply the allocation directly:
 
@@ -49,16 +49,16 @@ docker version
 docker compose version
 ```
 
-Download, verify and unpack the current **v0.5.0** release into a new directory (see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for later versions):
+Download, verify and unpack the current **v0.5.1** release into a new directory (see [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for later versions):
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.5.0/diehl2mqtt-v0.5.0-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.5.0/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.5.1/diehl2mqtt-v0.5.1-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.5.1/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.5.0-deploy.tar.gz
-cd diehl2mqtt-v0.5.0
+tar -xzf diehl2mqtt-v0.5.1-deploy.tar.gz
+cd diehl2mqtt-v0.5.1
 cp .env.example .env
 chmod 600 .env
 nano .env
@@ -97,7 +97,7 @@ docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml lo
 
 No registry login or local build is needed. Stop following logs with Ctrl+C; the container keeps running. Use the same Compose file list with `down` to stop/remove it. For anonymous MQTT omit the auth override and password setup; for JSON-only use just the base file and AES key. If Home Assistant Recorder has an include whitelist, include Total water before adding it to Energy.
 
-The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.5.0`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration. Docker upgrades use a new release's image digest and `pull`/`up`; the LXC's `update` command is for native LXC installations only.
+The public image is `ghcr.io/andrekuehne/diehl2mqtt`. Releases use version tags such as `v0.5.1`; `latest` follows tested main/weekly builds. Prefer the digest supplied in each release's deployment archive for deliberate upgrades and rollback. AES keys and MQTT passwords are created locally on each deployment host; they are never part of the image, release archive or CI configuration. Docker upgrades use a new release's image digest and `pull`/`up`; the LXC's `update` command is for native LXC installations only.
 
 ### Deploy from a source checkout
 
@@ -303,6 +303,8 @@ And **subscribe** to `homeassistant/status`. Adjust exact paths for configured p
 
 The shared device is Diehl Metering / HYDRUS 2.0 / DME173 with identifier `diehl_hydrus_12345678`. Discovery creates:
 
+The discovered device is named `Diehl Hydrus 2.0 ID 12345678` using your configured meter ID. Sensor names are simply `Total water`, `Flow temperature`, etc. Entity IDs keep the meter ID, for example `sensor.diehl_hydrus_12345678_total_m3`. `METER_NAME` controls the decoder label in telegram JSON, independently of Home Assistant naming. Existing Home Assistant name overrides take precedence; reset an override to use the published name.
+
 | Sensor | Unique ID suffix | Unit | Device class | State class |
 | --- | --- | --- | --- | --- |
 | Total water | `_total_m3` | m³ | water | total_increasing |
@@ -408,8 +410,8 @@ Successful main pushes and scheduled builds automatically publish `latest` to GH
 To create a versioned release after merging and verifying main, choose a new `vMAJOR.MINOR.PATCH` tag, then push it:
 
 ```bash
-git tag v0.5.0
-git push origin v0.5.0
+git tag v0.5.1
+git push origin v0.5.1
 ```
 
 When changing the installer release, update `DEFAULT_RELEASE` in `scripts/install-proxmox.py` and the release/SHA256 pins in `ct/diehl2mqtt.sh` together. Host tests enforce matching pins.

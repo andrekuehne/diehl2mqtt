@@ -31,10 +31,10 @@ For a downloadable standalone installer or a read-only preflight check:
 curl -fLo install-proxmox.py \
   https://raw.githubusercontent.com/andrekuehne/diehl2mqtt/main/scripts/install-proxmox.py
 python3 install-proxmox.py --check
-python3 install-proxmox.py --release v0.5.0
+python3 install-proxmox.py --release v0.5.1
 ```
 
-`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.5.0 deployment archive also includes this standalone installer under `scripts/`. Version v0.5.0 adds the one-line launcher and dialog setup, including the v0.4.1 clean guest-shell environment fix. Version v0.4.0 introduced native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
+`--check` verifies the host/version and lists Realtek USB ports without changing the host. `--dry-run` prompts for nonsecret options and shows the installation plan without installing anything or asking for keys. The v0.5.1 deployment archive also includes this standalone installer under `scripts/`. Version v0.5.1 names the discovered device `Diehl Hydrus 2.0 ID <meter ID>` and omits the ID from sensor display names, while preserving entity IDs. Version v0.5.0 adds the one-line launcher and dialog setup, including the v0.4.1 clean guest-shell environment fix. Version v0.4.0 introduced native application updates and configurable RAM/disk allocation, alongside full decoded-data discovery and the Proxmox extraction permission fix.
 
 The installer prompts for:
 
@@ -49,7 +49,7 @@ The installer prompts for:
 The default allocation is 1 core, 512 MiB RAM and a 2 GiB root disk. You can answer the allocation prompts or supply values directly:
 
 ```bash
-python3 install-proxmox.py --release v0.5.0 --memory 1024 --disk 8
+python3 install-proxmox.py --release v0.5.1 --memory 1024 --disk 8
 ```
 
 RAM accepts 256–65536 MiB and disk accepts 2–1024 GiB, subject to your node/storage capacity. A larger disk leaves more room for retained application releases. The script refuses to overwrite an existing VM/CT or managed configuration. Failed installations leave any newly created CT for inspection; they never delete a guest. A failure before completion may require inspecting/removing that incomplete CT explicitly before retrying with the same ID.

@@ -2,7 +2,7 @@ from dataclasses import replace
 import json
 import unittest
 from watermeter.settings import Settings
-from watermeter.discovery import messages
+from watermeter.discovery import SENSORS, messages
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -15,7 +15,8 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(config['device']['identifiers'], ['diehl_hydrus_12345678'])
             self.assertEqual(config['state_topic'], 'watermeter/12345678/state')
             self.assertEqual(config['availability_topic'], 'watermeter/12345678/availability')
-            self.assertTrue(config['name'].endswith(' 12345678'))
+            self.assertEqual(config['device']['name'], 'Diehl Hydrus 2.0 ID 12345678')
+            self.assertIn(config['name'], {name for _, name, _ in SENSORS})
             self.assertEqual(config['default_entity_id'], 'sensor.' + config['unique_id'])
             self.assertNotIn('expire_after', config)
             self.assertIn('.get(', config['value_template'])
@@ -43,9 +44,13 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(configs['diehl_hydrus_12345678_set_date']['device_class'], 'date')
         self.assertEqual(configs['diehl_hydrus_12345678_received_at']['device_class'], 'timestamp')
 
-    def test_meter_suffix_preserves_leading_zeros_and_existing_identity(self):
+    def test_device_name_preserves_leading_zeros_and_existing_identity(self):
         configs = [json.loads(payload) for _, payload in messages(replace(Settings(), meter_id='00123456'))]
-        self.assertEqual(configs[0]['name'], 'Total water 00123456')
+        self.assertEqual(configs[0]['name'], 'Total water')
         self.assertEqual(configs[0]['default_entity_id'], 'sensor.diehl_hydrus_00123456_total_m3')
         self.assertEqual(configs[0]['unique_id'], 'diehl_hydrus_00123456_total_m3')
-        self.assertTrue(all(c['name'].endswith(' 00123456') for c in configs))
+        self.assertTrue(all(c['device']['name'] == 'Diehl Hydrus 2.0 ID 00123456' for c in configs))
+        self.assertTrue(all('00123456' not in c['name'] for c in configs))
+        renamed = [json.loads(payload) for _, payload in messages(
+            replace(Settings(), meter_id='00123456', name='Basement'))]
+        self.assertEqual(renamed, configs)

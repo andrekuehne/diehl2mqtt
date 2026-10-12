@@ -41,7 +41,7 @@ The default broker connection uses no TLS. For TLS configuration, USB permission
 
 MQTT publishes the complete decoded telegram as retained JSON. Home Assistant discovers ten sensors for current/stored readings, dates and diagnostics; every name ends with your meter ID. New entity IDs place it immediately after `diehl_hydrus`, for example `sensor.diehl_hydrus_12345678_total_m3`. Status exposes the complete JSON as attributes. Optional values remain unknown when absent. Existing entity identities are preserved; Home Assistant only applies default entity IDs when first registering an entity.
 
-In Home Assistant, find the Water device under MQTT. Total water uses `m³`, `water` and `total_increasing`. If your Recorder has an include whitelist, include this sensor before adding it under Energy → Water consumption. Check States and Statistics if it does not appear.
+In Home Assistant, find the `Diehl Hydrus 2.0 ID <your meter ID>` device under MQTT. Sensor names omit the ID; entity IDs retain it. Total water uses `m³`, `water` and `total_increasing`. If your Recorder has an include whitelist, include this sensor before adding it under Energy → Water consumption. Check States and Statistics if it does not appear.
 
 For direct **Proxmox VE 9.1+ without Docker**, connect the SDR to the node and run this as root in the **Proxmox node shell**:
 
