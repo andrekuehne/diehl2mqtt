@@ -8,6 +8,22 @@ from .settings import ConfigError
 from .supervisor import log
 
 
+class VerifiedTLSClient(mqtt.Client):
+    # Paho 2.1.0's wrapper leaves failed-handshake sockets to GC and uses the
+    # 60-second keepalive as a handshake timeout. Keep the pinned adapter small.
+    def _ssl_wrap_socket(self, tcp_sock):
+        wrapped = None
+        try:
+            wrapped = self._ssl_context.wrap_socket(tcp_sock, server_hostname=self._host,
+                                                   do_handshake_on_connect=False)
+            wrapped.settimeout(self.connect_timeout)
+            wrapped.do_handshake()
+            return wrapped
+        except BaseException:
+            (wrapped if wrapped is not None else tcp_sock).close()
+            raise
+
+
 class Publisher:
     def __init__(self, settings, password=""):
         self.settings = settings
@@ -75,7 +91,7 @@ class Publisher:
 
     def _client(self):
         s = self.settings
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=s.client_id,
+        client = VerifiedTLSClient(mqtt.CallbackAPIVersion.VERSION2, client_id=s.client_id,
                              clean_session=True, protocol=mqtt.MQTTv311)
         client.connect_timeout = 3
         client.max_inflight_messages_set(1)
@@ -140,7 +156,7 @@ class Publisher:
                 self._session(client)
                 if self.connected:
                     backoff = 1
-            except (OSError, ValueError, RuntimeError, ssl.SSLError):
+            except Exception:
                 log("MQTT connection/TLS failure; reception continues during retry")
             finally:
                 try:
@@ -148,7 +164,7 @@ class Publisher:
                         self._publish(client, self.settings.availability_topic, "offline", shutdown=True)
                     client.disconnect()
                     client.loop(timeout=0.1)
-                except (OSError, ValueError, RuntimeError):
+                except Exception:
                     pass
                 self.connected = False
             if self._stop.wait(backoff):

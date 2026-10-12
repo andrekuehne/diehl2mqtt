@@ -54,3 +54,15 @@ STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["healthcheck.sh"]
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/entrypoint.sh"]
 CMD ["live"]
+
+FROM runtime AS test
+RUN apt-get update && apt-get install -y --no-install-recommends mosquitto mosquitto-clients openssl \
+    && rm -rf /var/lib/apt/lists/*
+COPY tests/ /tests/
+WORKDIR /
+ENV WATERMETER_TEST_MQTT=1
+ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
+CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
+
+# Keep the default build target as the broker-free production image.
+FROM runtime AS final

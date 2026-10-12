@@ -52,7 +52,7 @@ class Supervisor:
         lower = data.lower()
         for token, safe in ((b"no supported devices", "no supported SDR found"),
                             (b"permission", "USB permission problem"),
-                            (b"kernel driver", "device claimed by kernel driver"),
+                            (b"kernel driver is active", "device claimed by kernel driver"),
                             (b"decrypt", "decryption diagnostic; verify runtime key")):
             if token in lower:
                 category = safe
