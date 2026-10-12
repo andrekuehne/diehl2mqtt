@@ -21,7 +21,14 @@ jobs:
           # This fixed window predates the sanitized history. New images are excluded.
           versions = json.loads(pathlib.Path(os.environ['RUNNER_TEMP'], 'old-versions.json').read_text())
           selected = [v for v in versions if '2026-10-12T11:25:00Z' <= v['created_at'] < '2026-10-12T11:44:31Z']
+          blocked = []
           for version in selected:
-              subprocess.run(['gh', 'api', '--method', 'DELETE', 'users/andrekuehne/packages/container/diehl2mqtt/versions/' + str(version['id'])], check=True)
-          print('Withdrawn image versions from the initial publication window:', len(selected))
+              result = subprocess.run(['gh', 'api', '--method', 'DELETE', 'users/andrekuehne/packages/container/diehl2mqtt/versions/' + str(version['id'])], capture_output=True, text=True)
+              if result.returncode:
+                  blocked.append(version['id'])
+          print('Withdrawn image versions from the initial publication window:', len(selected) - len(blocked))
+          if blocked:
+              print('GitHub refused deletion of these legacy version IDs:', blocked)
+              print('A package owner must contact GitHub Support for versions protected by the public-download limit. No alternate deletion endpoint is attempted.')
+              raise SystemExit(1)
           PY
