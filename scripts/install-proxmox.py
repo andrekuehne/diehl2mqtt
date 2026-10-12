@@ -38,8 +38,12 @@ class InstallError(Exception):
 
 
 def run(*args, timeout=120, check=True):
+    # pct creates root-owned ancestors before entering the mapped extraction
+    # namespace. Its children must be able to traverse those directories.
+    # Keep the installer's private umask, and override it only in pct's child.
+    child_umask = 0o022 if Path(str(args[0])).name == "pct" else -1
     result = subprocess.run([str(a) for a in args], capture_output=True,
-                            text=True, timeout=timeout)
+                            text=True, timeout=timeout, umask=child_umask)
     if check and result.returncode:
         # No secrets ever enter child arguments or input. Never dump CT config.
         raise InstallError(f"{args[0]} {args[1]} failed: {result.stderr.strip()[-1500:]}")
@@ -446,6 +450,10 @@ def execute_install(settings):
     except Exception:
         if created:
             print(f"Installation incomplete. CT {ctid} is retained for inspection; no guest was deleted.", file=sys.stderr)
+        else:
+            print(f"CT creation did not complete. Inspect CT {ctid} and its storage before retrying; "
+                  "Proxmox may have cleaned it up or left partial files. This installer deletes nothing.",
+                  file=sys.stderr)
         raise
     finally:
         aes = password = ""

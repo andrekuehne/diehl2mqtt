@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -44,6 +45,24 @@ class InstallerTests(unittest.TestCase):
         for value in ("0", "99", "1000000000", "bad"):
             with self.assertRaises(ValueError):
                 app.ctid_value(value)
+
+    def test_pct_child_creates_traversable_directories_without_changing_parent_umask(self):
+        executable = self.root / "pct"
+        executable.write_text(f"#!{sys.executable}\nimport os, sys\nos.makedirs(sys.argv[1])\n")
+        executable.chmod(0o700)
+        old_umask = os.umask(0o077)
+        try:
+            app.run(executable, self.root / "guest/rootfs")
+            self.assertEqual((self.root / "guest").stat().st_mode & 0o777, 0o755)
+            self.assertEqual((self.root / "guest/rootfs").stat().st_mode & 0o777, 0o755)
+            private = self.root / "monitor.json"
+            private.write_text("{}")
+            self.assertEqual(private.stat().st_mode & 0o777, 0o600)
+            app.run(sys.executable, "-c", "from pathlib import Path; import sys; Path(sys.argv[1]).mkdir()",
+                    self.root / "other-child")
+            self.assertEqual((self.root / "other-child").stat().st_mode & 0o777, 0o700)
+        finally:
+            os.umask(old_umask)
 
     def test_create_is_unprivileged_stopped_and_not_nested(self):
         settings = {"ctid": 123, "hostname": "reader", "storage": "local-lvm", "bridge": "vmbr0",
