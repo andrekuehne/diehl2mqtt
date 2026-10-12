@@ -1,0 +1,11 @@
+.env
+.env.local
+secrets/
+*.key
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.runtime/
+test-output/
+*.egg-info/

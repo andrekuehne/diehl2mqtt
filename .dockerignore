@@ -1,0 +1,13 @@
+.git
+.agents
+.codex
+.aws
+.ssh
+.env
+.env.local
+secrets
+**/*.key
+**/__pycache__
+.venv
+.runtime
+test-output
