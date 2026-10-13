@@ -92,8 +92,12 @@ try:
             libusb.libusb_free_device_list(devices, 1)
 finally:
     libusb.libusb_exit(context)
-result = subprocess.run(['rtl_sdr', '-f', '868.95M', '-s', '1600000', '-'], capture_output=True, timeout=10)
-assert result.returncode != 0 and b'No supported devices' in result.stderr
+# An impossible index also keeps this safe/deterministic when host sysfs lists
+# an SDR: no receiver is selected, even though its USB nodes are not mounted.
+result = subprocess.run(['rtl_sdr', '-d', '2147483647', '-f', '868.95M', '-s', '1600000', '-'],
+                        capture_output=True, timeout=10)
+assert result.returncode != 0 and any(message in result.stderr for message in
+                                     (b'No supported devices', b'No matching devices found'))
 child = subprocess.Popen(['rtl_wmbus', '-f', '-p', 'S'], stdin=subprocess.PIPE,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 time.sleep(0.2)

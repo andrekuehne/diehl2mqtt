@@ -87,16 +87,16 @@ docker version
 docker compose version
 ```
 
-Download the **v0.8.1** deployment archive. It includes Compose files, setup scripts and a release-specific image digest; no source checkout, local build or registry login is needed. See [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for available versions and [signature verification](SECURITY.md#verify-release-provenance) to authenticate release checksums before using them.
+Download the **v0.8.2** deployment archive. It includes Compose files, setup scripts and a release-specific image digest; no source checkout, local build or registry login is needed. See [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for available versions and [signature verification](SECURITY.md#verify-release-provenance) to authenticate release checksums before using them.
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.8.1/diehl2mqtt-v0.8.1-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.8.1/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.8.2/diehl2mqtt-v0.8.2-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.8.2/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.8.1-deploy.tar.gz
-cd diehl2mqtt-v0.8.1
+tar -xzf diehl2mqtt-v0.8.2-deploy.tar.gz
+cd diehl2mqtt-v0.8.2
 cp .env.example .env
 chmod 600 .env
 nano .env
@@ -183,7 +183,7 @@ homeassistant/sensor/diehl_hydrus_<meter-id>_<field>/config
 
 The gateway publishes retained state, availability and discovery messages with QoS 1. Its broker account needs publish permission for those device topics and subscribe permission for `homeassistant/status`. It republishes discovery and the latest cached state on reconnect or Home Assistant startup.
 
-The state message contains **every field emitted by the decoder**, plus gateway `driver` and `received_at` fields. The Status sensor exposes the complete JSON as attributes. Missing optional readings remain unknown; they are not replaced with zero.
+The state message contains **every field emitted by the decoder**, plus gateway `driver` and `received_at` fields. The legacy `meter` field is retained as an alias of `driver` for compatibility. The Status sensor exposes the complete JSON as attributes. Missing optional readings remain unknown; they are not replaced with zero.
 
 Home Assistant groups the sensors under **Diehl Hydrus 2.0 ID 12345678**, using your meter ID. Sensor display names omit the ID; default entity IDs include it, for example `sensor.diehl_hydrus_12345678_total_m3`.
 

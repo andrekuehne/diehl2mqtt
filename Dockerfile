@@ -72,7 +72,7 @@ CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
 
 # Home Assistant manages options, USB mapping, updates and the health watchdog.
 FROM runtime AS ha-addon
-ARG HA_ADDON_VERSION=0.8.1
+ARG HA_ADDON_VERSION=0.8.2
 LABEL io.hass.version="${HA_ADDON_VERSION}" \
       io.hass.type="addon" \
       io.hass.arch="amd64" \

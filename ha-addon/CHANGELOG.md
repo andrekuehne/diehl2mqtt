@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.2
+
+- Update wmbusmeters from `ac4f295369a4` to `b58d96758e71`, including upstream decoder, date handling and status improvements. The RTL-WMBus revision remains unchanged.
+- Preserve the existing JSON/MQTT `meter` metadata as an alias of `driver` after the upstream field rename. MQTT topics, sensor identities and configuration are unchanged.
+- Add Dependabot coverage for runtime/CI Python dependencies and Renovate PRs for pinned decoder revisions. Record the installed Paho version directly in build metadata.
+- Refresh installation documentation and the Cosign installer used by release CI.
+
 ## 0.8.1
 
 - Fix SDR discovery under AppArmor by permitting read-only enumeration of `/sys/bus/`, required by libudev. Non-root operation and the other confinement rules remain enabled.

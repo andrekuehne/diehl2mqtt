@@ -1,5 +1,11 @@
 # Verification record
 
+## Native decoder update and metadata compatibility (v0.8.2)
+
+Reviewed the exact wmbusmeters update from `ac4f295369a48ef51cb835e6920b62cbee743bd6` to `b58d96758e71ba7a4c1d9674c7fcd05eb36fceea`, including upstream breaking-change notes, DME173 driver changes, RTL-WMBus input handling and unchanged license. The update spans 212 commits; focused interface review and regression tests do not constitute an audit of every upstream change.
+
+Actual old/new binaries decoded the same public encrypted fixture with a fixed RTL-WMBus reception timestamp. Every common field matched, including total volume, temperature, string status, UTC reception timestamp and relative RSSI. Upstream renamed `meter` to `driver`; the gateway retains `meter` as a compatibility alias after identity validation. A regression test compares the complete accepted payload across both upstream formats. Existing checks reject conflicting driver identities. No production credentials, meter data, radio hardware or broker were used for this comparison. Destination live reception remains an acceptance check after updating. Local validation passed all 54 application tests, 32 Proxmox host tests, two Renovate pin-consistency checks, native LXC layout, actual HA startup/recovery and enforced AppArmor checks. The AppArmor smoke test now requests an invalid SDR index explicitly, so its negative device check is independent of connected hardware.
+
 ## USB enumeration confinement regression (v0.8.1)
 
 After upgrading to 0.8.0, the owner reported that the previously working HAOS SDR was no longer found. The regression was reproduced locally: the non-root runtime enumerated seven USB devices without the custom profile and zero with it. Kernel audit logs identified an AppArmor denial when libudev opened `/sys/bus/`. Allowing read-only access to this directory restored positive libusb enumeration under the enforced profile. No USB device was opened and no RF stream or production broker was used.

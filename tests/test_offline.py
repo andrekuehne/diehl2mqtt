@@ -32,6 +32,9 @@ class OfflineTests(unittest.TestCase):
                     self.assertEqual(reading["timestamp"], stamp.replace(" ", "T") + "Z")
                     self.assertEqual(reading["rssi_dbm"], 133)
                     self.assertEqual(reading["total_m3"], 0.252)
+                    self.assertEqual(reading["driver"], "dme173")
+                    self.assertEqual(reading["meter"], "dme173")
+                    self.assertEqual(reading["status"], "OK")
 
     def test_synthetic_fixture_decrypts_with_public_key(self):
         from dataclasses import replace

@@ -64,7 +64,7 @@ The receiver pipeline uses UTC. **Decoder timestamp** marks radio reception (sec
 
 # Updates and troubleshooting
 
-Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.8.1` is the app image tag; `v0.8.1` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
+Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.8.2` is the app image tag; `v0.8.2` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
 
 The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. A custom enforced AppArmor profile restricts executables, writes and device paths. After a brief root bootstrap reads Configuration, the receiver runs as UID 10001/GID 0 with no Linux capabilities and privilege escalation disabled. GID 0 preserves standard HAOS USB group-write access across reconnects; host USB ownership/permissions are not changed. The expected HA security rating is 8/8 once the profile is installed. See [security policy and release signature verification](../SECURITY.md). No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
 

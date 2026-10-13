@@ -44,6 +44,9 @@ def accept(line, settings):
         if any("key" in k.lower() or "password" in k.lower() for k in reading):
             raise InvalidReading()
         reading["driver"] = settings.driver
+        # New wmbusmeters versions renamed meter to driver. Keep the existing
+        # MQTT/JSON metadata field for consumers of earlier gateway releases.
+        reading.setdefault("meter", settings.driver)
         reading["received_at"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         return reading
     except (ValueError, TypeError, RecursionError, OverflowError):

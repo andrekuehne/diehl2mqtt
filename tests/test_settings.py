@@ -98,6 +98,16 @@ class ReadingTests(unittest.TestCase):
     def setUp(self):
         self.reading = json.loads(Path("tests/fixtures/reading.json").read_text())
 
+    def test_upstream_driver_rename_preserves_published_payload(self):
+        modern = dict(self.reading)
+        modern["driver"] = modern.pop("meter")
+        before = accept(json.dumps(self.reading), Settings())
+        after = accept(json.dumps(modern), Settings())
+        before.pop("received_at")
+        after.pop("received_at")
+        self.assertEqual(after, before)
+        self.assertEqual(after["meter"], after["driver"])
+
     def test_valid_and_optional_unknown(self):
         self.reading.pop("flow_temperature_c")
         self.reading["status"] = None
