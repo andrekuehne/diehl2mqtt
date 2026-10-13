@@ -21,9 +21,10 @@ RUN mkdir -p /provenance/licenses \
     && cp meters/LICENSE /provenance/licenses/wmbusmeters.txt \
     && cp rtl/README.md /provenance/licenses/rtl-wmbus.txt \
     && cp /opt/venv/lib/python*/site-packages/paho_mqtt-*.dist-info/licenses/* /provenance/licenses/ \
-    && printf 'base=%s\nrtl_wmbus_ref=%s\nrtl_wmbus_commit=%s\nwmbusmeters_ref=%s\nwmbusmeters_commit=%s\npaho_mqtt=2.1.0\n' \
+    && printf 'base=%s\nrtl_wmbus_ref=%s\nrtl_wmbus_commit=%s\nwmbusmeters_ref=%s\nwmbusmeters_commit=%s\npaho_mqtt=%s\n' \
         "$BASE_IMAGE" "$RTL_WMBUS_REF" "$(git -C rtl rev-parse HEAD)" \
-        "$WMBUSMETERS_REF" "$(git -C meters rev-parse HEAD)" > /provenance/versions.txt
+        "$WMBUSMETERS_REF" "$(git -C meters rev-parse HEAD)" \
+        "$(/opt/venv/bin/python -c 'from importlib.metadata import version; print(version("paho-mqtt"))')" > /provenance/versions.txt
 # Installation tools are unnecessary in the runtime venv and have their own
 # vulnerability/attack surface. Keep only the hash-verified application deps.
 RUN /opt/venv/bin/pip uninstall -y setuptools pip

@@ -50,13 +50,13 @@ docker run --rm --network none watermeter:local versions
 ./scripts/check-updates.sh
 ```
 
-Review upstream changes before updating pins, including CLI/config compatibility, licenses, driver behavior and Paho callbacks/TLS. Keep the Dockerfile's dependency metadata consistent with the actual pins. The Paho TLS adapter uses a pinned private API and needs review when upgrading Paho.
+Review upstream changes before updating pins, including CLI/config compatibility, licenses, driver behavior and Paho callbacks/TLS. Paho build metadata is read from the installed package, so dependency updates also update its recorded version. The Paho TLS adapter uses a pinned private API and needs review when upgrading Paho.
 
 After changing dependencies, build without cache and rerun the offline, MQTT and deployment-specific checks. Live reception and destination-host behavior need separate verification. The [implementation notes](implementation-notes.md) describe upstream interfaces; the [verification record](verification.md) holds historical results.
 
 ## CI and publication
 
-PR builds have read-only permissions and cannot publish. Main pushes and scheduled builds publish tested images; manual main builds publish only when the `publish` input is enabled. Weekly rebuilds refresh packages while retaining reviewed source/base pins. Dependabot proposes Docker base and GitHub Action updates.
+PR builds have read-only permissions and cannot publish. Main pushes and scheduled builds publish tested images; manual main builds publish only when the `publish` input is enabled. Weekly rebuilds refresh packages while retaining reviewed source/base pins. Dependabot checks Docker base images, GitHub Actions and Python requirements weekly and opens update PRs. GitHub Dependabot vulnerability alerts and security update PRs are also enabled. Updates are reviewed and tested; they are not automatically merged or deployed.
 
 CI saves the tested images and the publication job loads them without rebuilding. Both runtime images are scanned; fixable HIGH/CRITICAL vulnerabilities block publication. The trusted publication job signs image digests and release checksums using GitHub OIDC/Cosign and verifies the signatures. See [SECURITY.md](../SECURITY.md).
 
