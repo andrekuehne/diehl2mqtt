@@ -1,0 +1,56 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabledManagers": [
+    "custom.regex"
+  ],
+  "dependencyDashboard": true,
+  "automerge": false,
+  "prConcurrentLimit": 2,
+  "prHourlyLimit": 2,
+  "timezone": "Europe/Berlin",
+  "schedule": [
+    "* 0-5 * * 1"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Dockerfile$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\r?\\n)ARG RTL_WMBUS_REF=(?<currentDigest>[a-f0-9]{40})(?:\\r?\\n|$)"
+      ],
+      "currentValueTemplate": "master",
+      "depNameTemplate": "xaelsouth/rtl-wmbus",
+      "packageNameTemplate": "https://github.com/xaelsouth/rtl-wmbus",
+      "datasourceTemplate": "git-refs"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Dockerfile$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\r?\\n)ARG WMBUSMETERS_REF=(?<currentDigest>[a-f0-9]{40})(?:\\r?\\n|$)"
+      ],
+      "currentValueTemplate": "master",
+      "depNameTemplate": "wmbusmeters/wmbusmeters",
+      "packageNameTemplate": "https://github.com/wmbusmeters/wmbusmeters",
+      "datasourceTemplate": "git-refs"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "git-refs"
+      ],
+      "pinDigests": true,
+      "prBodyNotes": [
+        "Tracks upstream master commits, which may be unreleased. Review decoder interfaces, licenses and reception behavior before merging. Both Dockerfile pins must remain identical. CI builds and tests Docker, native LXC and the Home Assistant app; live reception still needs separate verification. Merging does not create a versioned release or deploy updates."
+      ]
+    }
+  ]
+}
