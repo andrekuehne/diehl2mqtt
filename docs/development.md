@@ -20,10 +20,11 @@ Additional host-installer and manifest checks:
 
 ```bash
 python3 -m unittest discover -s tests/proxmox -v
+python3 -m unittest discover -s tests/maintenance -v
 python3 scripts/check-addon.py
 ```
 
-The manifest check requires PyYAML. CI also validates the native LXC layout, HA startup/recovery, enforced AppArmor, non-root privileges and image conversion. See [SECURITY.md](../SECURITY.md#local-confinement-tests) for the confinement-test prerequisites.
+The manifest check requires PyYAML from `requirements-dev.txt`. This CI/host dependency is also tracked by Dependabot and is not installed in runtime images. CI also validates the native LXC layout, HA startup/recovery, enforced AppArmor, non-root privileges and image conversion. See [SECURITY.md](../SECURITY.md#local-confinement-tests) for the confinement-test prerequisites.
 
 To deploy from the source checkout, copy `.env.example` to `.env.local`, set your meter/broker options and create the secrets using the README's setup scripts. Use the same Compose overrides as your selected mode:
 
@@ -57,6 +58,12 @@ After changing dependencies, build without cache and rerun the offline, MQTT and
 ## CI and publication
 
 PR builds have read-only permissions and cannot publish. Main pushes and scheduled builds publish tested images; manual main builds publish only when the `publish` input is enabled. Weekly rebuilds refresh packages while retaining reviewed source/base pins. Dependabot checks Docker base images, GitHub Actions and Python requirements weekly and opens update PRs. GitHub Dependabot vulnerability alerts and security update PRs are also enabled. Updates are reviewed and tested; they are not automatically merged or deployed.
+
+The **Native dependency watch** workflow checks `rtl-wmbus` and `wmbusmeters` weekly. Dependabot cannot track the raw Git commit pins in Dockerfile arguments. The watcher compares each pin with the upstream default branch and maintains one bot-owned review issue per dependency. It also flags archived repositories or more than a year without an upstream commit. It reads GitHub metadata only, never executes upstream code, and never changes pins. Default-branch changes may be unreleased; review them before selecting a new immutable revision. Closing an issue dismisses that candidate; a changed revision/status reopens it. An issue closes automatically when the pin matches an active, recent upstream head.
+
+Run the watcher read-only with `python3 scripts/watch-native-dependencies.py`, or use **Actions → Native dependency watch → Run workflow** to refresh review issues. Read-only checks can use `GH_TOKEN` to avoid GitHub's anonymous API rate limit. The scheduled job has contents-read and issues-write access, with no package publication or code-write permission.
+
+Monitoring still needs occasional maintainer attention: [GitHub disables scheduled workflows after 60 days without repository activity](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-workflow-runs/disabling-and-enabling-a-workflow), and [Dependabot can pause when update PRs remain untouched for 90 days](https://docs.github.com/en/code-security/reference/supply-chain-security/troubleshoot-dependabot/dependabot-updates-stopped). Check the Actions and Dependabot pages if updates stop. Weekly images refresh Debian packages within the selected distribution; OS-family changes and existing LXC system packages need separate maintenance.
 
 CI saves the tested images and the publication job loads them without rebuilding. Both runtime images are scanned; fixable HIGH/CRITICAL vulnerabilities block publication. The trusted publication job signs image digests and release checksums using GitHub OIDC/Cosign and verifies the signatures. See [SECURITY.md](../SECURITY.md).
 

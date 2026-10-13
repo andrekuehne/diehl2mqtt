@@ -1,0 +1,2 @@
+# Host/CI manifest validation only; not installed in runtime images.
+PyYAML==6.0.3
