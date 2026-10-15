@@ -83,3 +83,11 @@ Run the checks, commit to main, then tag and push that commit. CI rejects malfor
 Standalone release tags use `vMAJOR.MINOR.PATCH`; HA image tags omit the `v`. `latest` follows main/weekly publication; a version release does not move it. GHCR package visibility must be public for anonymous pulls. CI never updates deployed hosts automatically.
 
 When redistributing binaries, include corresponding source/build materials in accordance with the dependency licenses. See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
+## Fork snapshots and release 0.9.0
+
+Every CI run resolves `andrekuehne/rtl-wmbus`'s `refs/heads/dev` once and passes the resulting full commit as `RTL_WMBUS_DEV_REF` to the standalone, test and HA builds. Local builds use BuildKit's remote Git source at `dev`, allowing source changes to invalidate its cache. The upstream `RTL_WMBUS_REF`, wmbusmeters pin and their Renovate policy are unchanged. No fork hash is maintained in the repository.
+
+Both real binaries must pass reviewed IQ replays and the gateway tuning matrix. Fork source, tests and compiler stay in build stages; runtime contains the binaries, notices and resolved metadata. Versioned release packaging reads the fork commit from the tested image, verifies the reference pins, and archives that exact fork source rather than fetching the branch head again.
+
+Use the existing manual Build and verify workflow to build current dev and optionally publish latest images. HA/native LXC distribution requires a new versioned gateway release: 0.9.0, then 0.9.1 etc. Published release assets and semver image tags cannot be overwritten; rerunning a published version fails. Existing triggers and signing remain in place. Publishing latest tags does not update installed systems.

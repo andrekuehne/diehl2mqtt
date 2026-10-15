@@ -23,7 +23,7 @@ import time
 import urllib.request
 import uuid
 
-DEFAULT_RELEASE = "v0.8.2"
+DEFAULT_RELEASE = "v0.9.0"
 UI = False
 REPOSITORY = "https://github.com/andrekuehne/diehl2mqtt"
 PVE_CONFIG = Path("/etc/pve/lxc")
@@ -290,6 +290,11 @@ def collect_settings(args):
     check_exclusive(usb)
     env = {"METER_ID": prompt("Eight-digit Wireless M-Bus meter ID", pattern=r"[0-9]{8}"),
            "METER_AES_KEY_FILE": "/etc/diehl2mqtt/secrets/meter_aes_key"}
+    env["WMBUS_DECODER"] = args.decoder or ("reference" if defaults else choose(
+        "RTL-WMBus decoder. Dev is the bundled fork snapshot for field testing.",
+        "reference", [("reference", "Pinned upstream (default)"), ("dev", "Fork dev snapshot")]))
+    if env["WMBUS_DECODER"] == "dev" and tuple(map(int, args.release.removeprefix("v").split("."))) < (0, 9, 0):
+        raise InstallError("Fork dev selection requires gateway v0.9.0 or newer")
     env["WMBUS_FAST_MATH"] = args.fast_math or ("false" if defaults else choose(
         "Fast demodulator math? Approximate atan reduces CPU; compare reception before keeping it enabled.",
         "false", [("false", "Accurate math (default)"), ("true", "Fast approximate math")]))
@@ -496,7 +501,10 @@ def bootstrap_updates(rootfs, release, image, owner):
         path.symlink_to("/opt/diehl2mqtt/current/" + destination)
         os.chown(path, *owner, follow_symlinks=False)
     (target / "bin").mkdir()
-    for filename in ("wmbusmeters", "rtl_wmbus", "entrypoint.sh", "healthcheck.sh", "update"):
+    binaries = ["wmbusmeters", "rtl_wmbus", "entrypoint.sh", "healthcheck.sh", "update"]
+    if tuple(map(int, release.removeprefix("v").split("."))) >= (0, 9, 0):
+        binaries.append("rtl_wmbus_dev")
+    for filename in binaries:
         path = rootfs / "usr/local/bin" / filename
         if path.is_symlink() or not path.is_file():
             raise InstallError("Unexpected native binary layout")
@@ -521,7 +529,7 @@ def show_plan(settings):
     print(f"1 core, {settings.get('memory', 512)} MiB RAM, {settings.get('disk', 2)} GiB disk on {settings['storage']}")
     print(f"Network: {settings['bridge']}, IPv4 {settings['address']}; USB port {settings['usb']['port']}")
     print(f"Release {settings['release']}, pinned image {settings['image']}")
-    print(f"Demodulator: algorithm={settings['env'].get('WMBUS_ALGORITHM', 'both')}, "
+    print(f"Demodulator: decoder={settings['env'].get('WMBUS_DECODER', 'reference')}, algorithm={settings['env'].get('WMBUS_ALGORITHM', 'both')}, "
           f"fast_math={settings['env'].get('WMBUS_FAST_MATH', 'false')}")
     print("Install skopeo if needed. Detach only this SDR's DVB driver if active.")
     print("A host timer starts the CT at boot, checks health, and handles USB reconnects.")
@@ -532,7 +540,8 @@ def execute_install(settings):
     if not confirm(f"Create unprivileged CT {ctid}: {settings['hostname']}?\n\n"
                    f"RAM: {settings.get('memory', 512)} MiB\nDisk: {settings.get('disk', 2)} GiB on {settings['storage']}\n"
                    f"Network: {settings['bridge']}, {settings['address']}\nUSB port: {settings['usb']['port']}\n"
-                   f"Demodulator: {settings['env'].get('WMBUS_ALGORITHM', 'both')}, "
+                   f"Demodulator: {settings['env'].get('WMBUS_DECODER', 'reference')}, "
+                   f"{settings['env'].get('WMBUS_ALGORITHM', 'both')}, "
                    f"fast math {settings['env'].get('WMBUS_FAST_MATH', 'false')}\n"
                    f"Release: {settings['release']}\n\nOnly this new CT will be configured."):
         return
@@ -616,6 +625,7 @@ def main():
     parser.add_argument("--memory", type=memory_value, help="RAM in MiB (interactive default: 512)")
     parser.add_argument("--disk", type=disk_value, help="Root disk in GiB (interactive default: 2)")
     parser.add_argument("--fast-math", choices=("false", "true"), help="Approximate demodulator math (default: false)")
+    parser.add_argument("--decoder", choices=("reference", "dev"), help="RTL-WMBus decoder (default: reference)")
     parser.add_argument("--algorithm", choices=("both", "runlength", "time2"), help="Demodulator algorithms (default: both)")
     parser.add_argument("--dry-run", action="store_true", help="Prompt/validate and show plan; make no changes")
     parser.add_argument("--check", action="store_true", help="Check PVE version and connected SDRs only")

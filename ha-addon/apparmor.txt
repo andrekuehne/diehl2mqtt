@@ -17,6 +17,7 @@ profile diehl2mqtt flags=(attach_disconnected,mediate_deleted) {
   /opt/venv/bin/python{,3,3.11} rix,
   /usr/bin/rtl_sdr rix,
   /usr/local/bin/rtl_wmbus rix,
+  /usr/local/bin/rtl_wmbus_dev rix,
   /usr/local/bin/wmbusmeters rix,
 
   /opt/venv/ r,

@@ -37,7 +37,7 @@ def main():
         for source, target in (('/opt/watermeter', 'watermeter'), ('/opt/venv', 'venv'),
                                ('/usr/share/watermeter', 'provenance')):
             archive.add(source, arcname=target, filter=clean)
-        for name in ('wmbusmeters', 'rtl_wmbus', 'entrypoint.sh', 'healthcheck.sh', 'update'):
+        for name in ('wmbusmeters', 'rtl_wmbus', 'rtl_wmbus_dev', 'entrypoint.sh', 'healthcheck.sh', 'update'):
             archive.add('/usr/local/bin/' + name, arcname='bin/' + name, filter=clean)
         data = json.dumps(metadata).encode()
         info = tarfile.TarInfo('bundle.json')

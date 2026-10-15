@@ -1,12 +1,13 @@
 """Bounded latest-state publisher; only the worker performs network I/O."""
 import ssl
+import logging
 import socket
 import threading
 import time
 import paho.mqtt.client as mqtt
 from .discovery import messages
 from .settings import ConfigError
-from .supervisor import log
+from .log import log
 
 
 class VerifiedTLSClient(mqtt.Client):
@@ -64,7 +65,7 @@ class Publisher:
 
     def _on_connect(self, client, _userdata, _flags, reason, _properties):
         if reason.is_failure:
-            log("MQTT connection rejected; check authentication and broker policy")
+            log("MQTT connection rejected; check authentication and broker policy", logging.ERROR)
             self.connected = False
             return
         self.connected = True
@@ -74,17 +75,17 @@ class Publisher:
             rc, _ = client.subscribe(self.settings.status_topic, qos=1)
             if rc != mqtt.MQTT_ERR_SUCCESS:
                 self.connected = False
-                log("MQTT birth subscription failed")
+                log("MQTT birth subscription failed", logging.ERROR)
 
     def _on_subscribe(self, _client, _userdata, _mid, reasons, _properties):
         if any(reason.is_failure for reason in reasons):
-            log("MQTT birth subscription rejected; check broker ACL")
+            log("MQTT birth subscription rejected; check broker ACL", logging.ERROR)
             self.connected = False
 
     def _on_disconnect(self, _client, _userdata, _flags, _reason, _properties):
         self.connected = False
         if not self._stop.is_set():
-            log("MQTT disconnected; reception continues during retry")
+            log("MQTT disconnected; reception continues during retry", logging.WARNING)
 
     def _on_message(self, _client, _userdata, message):
         if message.topic == self.settings.status_topic and message.payload == b"online":
@@ -118,7 +119,7 @@ class Publisher:
                 return True
             if client.loop(timeout=0.1) != mqtt.MQTT_ERR_SUCCESS:
                 return False
-        log("MQTT publish acknowledgement unavailable; latest state will replay")
+        log("MQTT publish acknowledgement unavailable; latest state will replay", logging.WARNING)
         return False
 
     def _session(self, client):
@@ -158,7 +159,7 @@ class Publisher:
                 if self.connected:
                     backoff = 1
             except Exception:
-                log("MQTT connection/TLS failure; reception continues during retry")
+                log("MQTT connection/TLS failure; reception continues during retry", logging.ERROR)
             finally:
                 try:
                     if client.is_connected():

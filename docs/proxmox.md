@@ -89,6 +89,23 @@ systemctl enable --now diehl2mqtt-lxc@CTID.timer
 
 The monitor starts the CT again. Check its console for `algorithm=both, fast_math=true` and confirm fresh readings. To restore defaults, repeat with `false` and `both`. Application updates preserve these CT environment settings. Editing a guest shell's environment alone does not configure its main receiver.
 
+## Decoder selection
+
+Version 0.9.0 bundles `reference` (the existing pinned xaelsouth build, default) and `dev` (andrekuehne's fork snapshot). New installations expose the choice in Advanced/plain setup; `--decoder dev` also applies to Default setup. Both binaries live inside the versioned application bundle and follow updates/rollbacks together.
+
+For an existing installation, first run `update` inside the guest and confirm 0.9.0 or newer with `update --status`. On the **Proxmox node**, replace `CTID` below with your CT number:
+
+```bash
+systemctl disable --now diehl2mqtt-lxc@CTID.timer
+systemctl stop diehl2mqtt-lxc@CTID.service
+pct shutdown CTID
+sed -i '/^lxc\.environment\(\.runtime\)\?: WMBUS_DECODER=/d' /etc/pve/lxc/CTID.conf
+printf '%s\n' 'lxc.environment.runtime: WMBUS_DECODER=dev' >> /etc/pve/lxc/CTID.conf
+systemctl enable --now diehl2mqtt-lxc@CTID.timer
+```
+
+The monitor starts the CT again. Startup diagnostics show the variant and its commit. Use `reference` in the same procedure to switch back, including **before rollback to a pre-0.9.0 release**. Fast math and algorithm settings remain independent. Updates preserve the choice and supply both new binaries; restarting never fetches new code. To inspect the bundled source commits inside the guest, run `/opt/venv/bin/python -m watermeter versions`.
+
 ## USB access and automatic restart
 
 Proxmox's `dev0` option maps **only the selected USB character device**, with guest-root ownership and mode 0600. The LXC remains unprivileged. The installer does not expose the whole USB bus, make devices world-writable, enable nesting, or disable AppArmor. If the selected dongle is bound to the host's `dvb_usb_rtl28xxu` or `rtl2832_sdr` driver, the monitor unbinds only that dongle's interface; it does not unload or globally blacklist host drivers.

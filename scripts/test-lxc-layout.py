@@ -15,7 +15,9 @@ subprocess.run(['/usr/bin/env', '-i', 'PATH=/usr/local/bin:/usr/bin:/bin',
                 '/usr/local/bin/update', '--status'], check=True)
 subprocess.run(['/opt/venv/bin/python', '-c', 'import paho.mqtt, watermeter.update, watermeter.lxc'], check=True)
 subprocess.run(['/usr/local/bin/wmbusmeters', '--listdrivers'], check=True, stdout=subprocess.DEVNULL)
-subprocess.run(['/usr/local/bin/rtl_wmbus', '-V'], check=True, stdout=subprocess.DEVNULL)
+for binary in ('rtl_wmbus', 'rtl_wmbus_dev'):
+    subprocess.run(['/usr/local/bin/' + binary, '-V'], check=True, stdout=subprocess.DEVNULL)
+    assert os.readlink('/usr/local/bin/' + binary) == '/opt/diehl2mqtt/current/bin/' + binary
 assert Path('/opt/diehl2mqtt/launcher/watermeter/lxc.py').is_file()
 assert os.readlink('/opt/diehl2mqtt/current') == f'releases/{installer.DEFAULT_RELEASE}-initial'
 assert os.readlink('/usr/local/bin/update') == '/opt/diehl2mqtt/current/bin/update'

@@ -10,21 +10,50 @@ from watermeter.reading import accept, InvalidReading
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_log_levels_with_and_without_mqtt(self):
+        for mqtt in (False, True):
+            env = {'MQTT_ENABLED': str(mqtt), 'MQTT_HOST': 'broker.invalid'}
+            self.assertEqual(Settings.load(env).log_level, 'info')
+            for level in ('debug', 'info', 'warning', 'error', 'critical'):
+                self.assertEqual(Settings.load(env | {'LOG_LEVEL': level}).log_level, level)
+            for level in ('', 'verbose', 'DEBUG', 'info\n'):
+                with self.assertRaises(ConfigError):
+                    Settings.load(env | {'LOG_LEVEL': level})
+
     def test_receiver_tuning_reaches_pipeline_with_and_without_mqtt(self):
         from watermeter.supervisor import Supervisor
         for mqtt in (False, True):
             env = {'MQTT_ENABLED': str(mqtt), 'MQTT_HOST': 'broker.invalid'}
             default = Settings.load(env)
             self.assertEqual((default.fast_math, default.algorithm), (False, 'both'))
-            for fast_math in (False, True):
-                for algorithm, flags in (('both', []), ('runlength', ['-t', '0']), ('time2', ['-r', '0'])):
-                    with self.subTest(mqtt=mqtt, fast_math=fast_math, algorithm=algorithm):
-                        settings = Settings.load(env | {'WMBUS_FAST_MATH': str(fast_math),
-                                                        'WMBUS_ALGORITHM': algorithm})
-                        pipeline = Supervisor(settings, {}, '/private/config', '/unused').commands
-                        self.assertEqual(pipeline[1], ['rtl_wmbus', '-f', '-p', 'S'] +
-                                         (['-a'] if fast_math else []) + flags)
-                        self.assertEqual(pipeline[0], ['rtl_sdr', '-f', '868.95M', '-s', '1600000', '-'])
+            self.assertEqual(default.decoder, "reference")
+            for decoder in ("reference", "dev"):
+                for fast_math in (False, True):
+                    for algorithm, flags in (('both', []), ('runlength', ['-t', '0']), ('time2', ['-r', '0'])):
+                        with self.subTest(mqtt=mqtt, fast_math=fast_math, algorithm=algorithm):
+                            settings = Settings.load(env | {'WMBUS_DECODER': decoder, 'WMBUS_FAST_MATH': str(fast_math),
+                                                            'WMBUS_ALGORITHM': algorithm})
+                            pipeline = Supervisor(settings, {}, '/private/config', '/unused').commands
+                            self.assertEqual(pipeline[1], ['rtl_wmbus_dev' if decoder == 'dev' else 'rtl_wmbus', '-f', '-p', 'S'] +
+                                             (['-a'] if fast_math else []) + flags)
+                            self.assertEqual(pipeline[0], ['rtl_sdr', '-f', '868.95M', '-s', '1600000', '-'])
+
+    def test_missing_selected_decoder_does_not_start_receiver_or_fallback(self):
+        from unittest.mock import patch
+        from watermeter.supervisor import Supervisor
+        for mqtt in (False, True):
+            for decoder in ('reference', 'dev'):
+                settings = Settings.load({'MQTT_ENABLED': str(mqtt), 'MQTT_HOST': 'broker.invalid',
+                                          'WMBUS_DECODER': decoder})
+                with tempfile.TemporaryDirectory() as root:
+                    receiver = Supervisor(settings, {'PATH': '/active-release/bin'}, '/config', root)
+                    selected = 'rtl_wmbus_dev' if decoder == 'dev' else 'rtl_wmbus'
+                    with patch('watermeter.supervisor.shutil.which',
+                               side_effect=lambda name, **kw: None if name == selected else '/bin/' + name), \
+                         patch('watermeter.supervisor.subprocess.Popen') as spawn:
+                        with self.assertRaisesRegex(ConfigError, 'Selected ' + decoder):
+                            receiver.run()
+                    spawn.assert_not_called()
 
     def test_aes_validation_and_precedence(self):
         key = secrets.token_hex(16)
@@ -61,7 +90,8 @@ class ConfigurationTests(unittest.TestCase):
                             ("METER_DRIVER", "auto"), ("WMBUS_MODE", "t1"),
                             ("WMBUS_FREQUENCY", "868.95M;id"), ("MQTT_ENABLED", "maybe"),
                             ("WMBUS_FAST_MATH", "maybe"), ("WMBUS_ALGORITHM", ""),
-                            ("WMBUS_ALGORITHM", "none"), ("WMBUS_ALGORITHM", "both -a")):
+                            ("WMBUS_DECODER", ""), ("WMBUS_DECODER", "other"),
+                            ("WMBUS_DECODER", "dev -a"), ("WMBUS_ALGORITHM", "none"), ("WMBUS_ALGORITHM", "both -a")):
             with self.subTest(name=name), self.assertRaises(ConfigError):
                 Settings.load({name: value})
         self.assertFalse(Settings.load({"MQTT_HOST": ""}).mqtt)

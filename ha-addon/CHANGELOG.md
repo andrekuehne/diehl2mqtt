@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+
+- Bundle the reference RTL-WMBus decoder and a build-time snapshot of andrekuehne/rtl-wmbus dev. Select reference (default) or dev in Docker, native LXC and Home Assistant configuration, then restart.
+- Record both decoder commits; ship the exact fork source and both binaries in native updates. New fork snapshots arrive through versioned gateway updates.
+- Keep the upstream decoder pin, MQTT identities, security confinement and experimental status unchanged.
+
+- Add a log-level selector (`debug`, `info`, `warning`, `error`, `critical`), defaulting to `info`. Per-reading logs now require `debug`; MQTT delivery continues at every level.
+- Document Home Assistant journal storage and expose the shared `LOG_LEVEL` setting for Docker/LXC diagnostics. JSON-only stdout remains available independently of log level.
+
 ## 0.8.2
 
 - Update wmbusmeters from `ac4f295369a4` to `b58d96758e71`, including upstream decoder, date handling and status improvements. The RTL-WMBus revision remains unchanged.

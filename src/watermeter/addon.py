@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import logging
 import os
 from pathlib import Path
 import signal
@@ -9,10 +10,11 @@ import threading
 import urllib.request
 
 from .health import healthy
+from .log import configure, log
 from .private import require_tmpfs
 from .privileges import APP_UID, APP_GID, drop_privileges
 from .settings import ConfigError, Settings, secret
-from .supervisor import log, run
+from .supervisor import run
 
 ROOT = Path('/tmp/watermeter')
 OPTIONS = Path('/data/options.json')
@@ -64,7 +66,7 @@ def configuration(options, token='', root=ROOT, service=mqtt_service):
     """Use data-only Settings validation; never place credentials in os.environ."""
     strings = {
         'meter_id': '', 'aes_key': '', 'meter_name': 'Water', 'frequency': '868.95M',
-        'algorithm': 'both',
+        'algorithm': 'both', 'log_level': 'info', 'decoder': 'reference',
         'mqtt_host': '', 'mqtt_username': '', 'mqtt_password': '',
         'mqtt_ca_certificate': '', 'mqtt_client_certificate': '', 'mqtt_client_key': '',
         'mqtt_topic_prefix': 'watermeter', 'mqtt_client_id': '',
@@ -94,6 +96,7 @@ def configuration(options, token='', root=ROOT, service=mqtt_service):
         'METER_ID': values['meter_id'], 'METER_NAME': values['meter_name'],
         'WMBUS_FREQUENCY': values['frequency'], 'MQTT_ENABLED': 'true',
         'WMBUS_FAST_MATH': str(values['fast_math']), 'WMBUS_ALGORITHM': values['algorithm'],
+        'LOG_LEVEL': values['log_level'], 'WMBUS_DECODER': values['decoder'],
         'MQTT_HOST': values['mqtt_host'], 'MQTT_PORT': str(port),
         'MQTT_USERNAME': values['mqtt_username'], 'MQTT_TLS': str(values['mqtt_tls']),
         'MQTT_TOPIC_PREFIX': values['mqtt_topic_prefix'],
@@ -163,7 +166,7 @@ def receive(settings, key, password, env, root=ROOT, reader=run, retry=5):
             # Supervisor cleans up the whole pipeline and publishes offline on failure.
             if reader(settings, key, password, env, root=root) == 0:
                 return 0
-            log('Receiver stopped unexpectedly; retrying in five seconds (check USB passthrough)')
+            log('Receiver stopped unexpectedly; retrying in five seconds (check USB passthrough)', logging.WARNING)
             if stopped.wait(retry):
                 break
         return 0
@@ -174,6 +177,7 @@ def receive(settings, key, password, env, root=ROOT, reader=run, retry=5):
 
 def main():
     os.umask(0o077)
+    configure()
     try:
         ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
         if ROOT.is_symlink() or ROOT.stat().st_uid != os.getuid() or ROOT.stat().st_mode & 0o077:
@@ -182,6 +186,7 @@ def main():
         # Remove the token from the process environment before starting any child.
         token = os.environ.pop('SUPERVISOR_TOKEN', '')
         options = load_options()
+        configure(options.get('log_level', 'info'))
         # Read options while root. Every receiver
         # process, certificate file and network-serving thread starts non-root.
         if os.getuid() == 0:
@@ -194,10 +199,10 @@ def main():
         with health_server():
             return receive(settings, key, password, env)
     except ConfigError as exc:
-        log(str(exc))
+        log(str(exc), logging.ERROR)
         return 2
     except Exception:
-        log('Add-on failed safely; check Configuration, USB passthrough and runtime permissions')
+        log('Add-on failed safely; check Configuration, USB passthrough and runtime permissions', logging.ERROR)
         return 1
 
 

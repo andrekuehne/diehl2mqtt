@@ -29,6 +29,18 @@ RUN mkdir -p /provenance/licenses \
 # vulnerability/attack surface. Keep only the hash-verified application deps.
 RUN /opt/venv/bin/pip uninstall -y setuptools pip
 
+# Build the fork independently; upstream build instructions and pins stay intact.
+FROM build AS dev-build
+ARG RTL_WMBUS_DEV_REF=dev
+ADD --keep-git-dir=true https://github.com/andrekuehne/rtl-wmbus.git#${RTL_WMBUS_DEV_REF} /build/rtl-dev/
+COPY scripts/test-decoder-replays.py /build/test-decoder-replays.py
+RUN cd /build/rtl-dev && make release && make check \
+    && python3 /build/test-decoder-replays.py --source /build/rtl-dev \
+        --reference /build/rtl/build/rtl_wmbus --dev /build/rtl-dev/build/rtl_wmbus \
+    && cp README.md /provenance/licenses/rtl-wmbus-dev.txt \
+    && printf 'rtl_wmbus_dev_repository=https://github.com/andrekuehne/rtl-wmbus\nrtl_wmbus_dev_branch=dev\nrtl_wmbus_dev_ref=%s\nrtl_wmbus_dev_commit=%s\n' \
+        "$RTL_WMBUS_DEV_REF" "$(git rev-parse HEAD)" >> /provenance/versions.txt
+
 FROM ${BASE_IMAGE} AS runtime
 ARG BASE_IMAGE
 ARG RTL_WMBUS_REF=34684e655df70867ac86e799561ec6512c45be0a
@@ -43,9 +55,10 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/watermeter && chmod 700 /run/watermeter
 COPY --from=build /build/rtl/build/rtl_wmbus /usr/local/bin/rtl_wmbus
+COPY --from=dev-build /build/rtl-dev/build/rtl_wmbus /usr/local/bin/rtl_wmbus_dev
 COPY --from=build /build/meters/build/wmbusmeters /usr/local/bin/wmbusmeters
 COPY --from=build /opt/venv /opt/venv
-COPY --from=build /provenance /usr/share/watermeter
+COPY --from=dev-build /provenance /usr/share/watermeter
 RUN dpkg-query -W > /usr/share/watermeter/packages.txt
 COPY src/ /opt/watermeter/
 COPY scripts/entrypoint.sh scripts/healthcheck.sh scripts/smoke-image.sh /usr/local/bin/
@@ -53,7 +66,7 @@ COPY --chmod=755 scripts/update.sh /usr/local/bin/update
 COPY tests/fixtures/dme173_12345678.hex /usr/share/watermeter/fixture.hex
 ENV PATH="/opt/venv/bin:${PATH}" PYTHONPATH=/opt/watermeter PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 METER_ID=12345678 METER_DRIVER=dme173 METER_NAME=Water \
-    WMBUS_FREQUENCY=868.95M WMBUS_MODE=c1 WMBUS_FAST_MATH=false WMBUS_ALGORITHM=both MQTT_ENABLED=false
+    WMBUS_FREQUENCY=868.95M WMBUS_MODE=c1 WMBUS_DECODER=reference WMBUS_FAST_MATH=false WMBUS_ALGORITHM=both MQTT_ENABLED=false
 RUN smoke-image.sh
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["healthcheck.sh"]
@@ -72,7 +85,7 @@ CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
 
 # Home Assistant manages options, USB mapping, updates and the health watchdog.
 FROM runtime AS ha-addon
-ARG HA_ADDON_VERSION=0.8.2
+ARG HA_ADDON_VERSION=0.9.0
 LABEL io.hass.version="${HA_ADDON_VERSION}" \
       io.hass.type="addon" \
       io.hass.arch="amd64" \

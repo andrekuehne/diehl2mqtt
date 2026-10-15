@@ -32,6 +32,7 @@ meter_name: Water
 frequency: 868.95M
 fast_math: false
 algorithm: both
+log_level: info
 mqtt_auto: false
 mqtt_host: "192.0.2.10"
 mqtt_port: 1883
@@ -62,9 +63,25 @@ The app publishes complete decoded JSON with QoS 1, retained state/discovery and
 
 The receiver pipeline uses UTC. **Decoder timestamp** marks radio reception (seconds); **Last received** marks gateway acceptance (milliseconds). HA displays both in your configured timezone, so 20:47 UTC appears as 22:47 in Berlin summer time. Meter-local billing and set dates keep their existing interpretation.
 
+# Logging
+
+Set **Log level** (`log_level`) in Configuration, save and restart. The default is `info`. Each level includes messages at that severity and above:
+
+| Level | Output |
+| --- | --- |
+| `debug` | Every decoded reading, filtered decoder diagnostics, and all messages below |
+| `info` | Startup, receiver lifecycle and MQTT connection messages, warnings and errors |
+| `warning` | Recoverable interruptions, retries and errors |
+| `error` | Receiver, USB, configuration and MQTT failures |
+| `critical` | Only critical failures; ordinary errors are suppressed |
+
+Decoded readings are logged only at `debug`; MQTT state, discovery, availability and sensor updates continue at every level. Raw upstream text, AES keys, passwords and the Supervisor token remain suppressed even at `debug`.
+
+The app writes diagnostics to container stderr and creates no persistent log files under `/data` or `/config`. Home Assistant captures the output in the app's **Log** tab. [HA OS uses the system journal](https://github.com/home-assistant/operating-system/blob/dev/buildroot-external/rootfs-overlay/etc/docker/daemon.json), normally stored under `/var/log/journal` on the host; retention and rotation are managed by HA OS. This is separate from Recorder sensor history. Runtime state under `/tmp/watermeter` is temporary tmpfs data, not a log archive.
+
 # Updates and troubleshooting
 
-Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.8.2` is the app image tag; `v0.8.2` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
+Update through Home Assistant's normal app/add-on update button. Options persist across image replacement. The native LXC `update` command is not used here. `0.9.0` is the app image tag; `v0.9.0` is the standalone Docker/LXC image tag in the same public GHCR package. CI tests each image before publishing.
 
 The add-on requests raw USB access, keeps protection mode enabled and does not request full hardware access, host networking, host PID or broad Supervisor API access. Only the configured Supervisor MQTT service is consumed. A custom enforced AppArmor profile restricts executables, writes and device paths. After a brief root bootstrap reads Configuration, the receiver runs as UID 10001/GID 0 with no Linux capabilities and privilege escalation disabled. GID 0 preserves standard HAOS USB group-write access across reconnects; host USB ownership/permissions are not changed. The expected HA security rating is 8/8 once the profile is installed. See [security policy and release signature verification](../SECURITY.md). No web UI or host network port is exposed. A private-network `/health` endpoint drives Watchdog; it checks the pipeline processes and heartbeat, independently of reception gaps and broker outages.
 
@@ -74,3 +91,9 @@ The add-on requests raw USB access, keeps protection mode enabled and does not r
 - **All sensors unavailable:** inspect MQTT reconnect/receiver diagnostics and check for another publisher using the same client ID or availability topic.
 - **Nothing discovered after deleting a device:** restart the add-on or publish `online` to `homeassistant/status` to replay discovery.
 - **Broker outage:** reception continues and the latest state is cached for replay on reconnect. Startup in automatic mode needs the Supervisor MQTT service to be available.
+
+## Decoder selection
+
+Version 0.9.0 includes the existing pinned xaelsouth decoder (`reference`, default) and a build-time snapshot of andrekuehne/rtl-wmbus `dev`. Choose **RTL-WMBus decoder → dev**, save and restart to test the fork. Select `reference` to switch back. Fast math, algorithms, tuning and MQTT identities stay the same.
+
+Startup diagnostics show the selected variant and commit. The `dev` option runs the snapshot already installed; restarting does not fetch code. New snapshots arrive through normal versioned add-on updates (0.9.1, etc.), which you install manually during testing. Switch to `reference` before restoring a pre-0.9.0 add-on version. Compare CPU use and reception gaps with identical settings.

@@ -62,6 +62,35 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(update.current_name(), 'old')
         self.assertEqual(list(self.root.glob('.staging-*')), [])
 
+    def test_new_release_missing_fork_is_rejected_before_switch(self):
+        import hashlib
+        import platform
+        metadata = dict(format=1, version='v0.9.0', architecture=platform.machine(),
+                        python=list(sys.version_info[:2]),
+                        os=[platform.freedesktop_os_release()['ID'], platform.freedesktop_os_release()['VERSION_ID']])
+        archive = self.root / 'missing-dev.tar.gz'
+        data = json.dumps(metadata).encode()
+        with tarfile.open(archive, 'w:gz') as stream:
+            info = tarfile.TarInfo('bundle.json')
+            info.size = len(data)
+            stream.addfile(info, io.BytesIO(data))
+            directory = tarfile.TarInfo('venv')
+            directory.type = tarfile.DIRTYPE
+            directory.mode = 0o755
+            stream.addfile(directory)
+        checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+        def smoke(command, **kwargs):
+            if command[0].endswith('/rtl_wmbus_dev'):
+                raise FileNotFoundError()
+            return subprocess.CompletedProcess(command, 0)
+        with patch.object(update, 'download', return_value=(checksum + '  diehl2mqtt-v0.9.0-app-amd64.tar.gz\n').encode()), \
+             patch.object(update.urllib.request, 'urlopen', side_effect=lambda *a, **k: archive.open('rb')), \
+             patch.object(update.subprocess, 'run', side_effect=smoke):
+            with self.assertRaisesRegex(update.UpdateError, 'compatibility smoke'):
+                update.stage('v0.9.0')
+        self.assertEqual(update.current_name(), 'old')
+        self.assertEqual(list(self.root.glob('.staging-*')), [])
+
     def test_abi_mismatch_requires_redeploy(self):
         metadata = dict(format=1, version='v0.5.0', architecture='x86_64', python=list(sys.version_info[:2]), os=['debian', '12'])
         with patch.object(update.platform, 'machine', return_value='x86_64'):
@@ -161,13 +190,14 @@ class UpdateTests(unittest.TestCase):
     def test_real_image_bundle_roundtrip(self):
         archive = self.root / 'real.tar.gz'
         with archive.open('wb') as out:
-            subprocess.run(['/usr/bin/python3', '/tests/package-app.py', '--version', 'v0.5.0',
+            subprocess.run(['/usr/bin/python3', '/tests/package-app.py', '--version', 'v0.9.0',
                             '--image', 'ghcr.io/andrekuehne/diehl2mqtt@sha256:' + '0' * 64], stdout=out, check=True)
         import hashlib
         checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
-        with patch.object(update, 'download', return_value=(checksum + '  diehl2mqtt-v0.5.0-app-amd64.tar.gz\n').encode()), \
+        with patch.object(update, 'download', return_value=(checksum + '  diehl2mqtt-v0.9.0-app-amd64.tar.gz\n').encode()), \
              patch.object(update.urllib.request, 'urlopen', side_effect=lambda *a, **k: archive.open('rb')):
-            name = update.stage('v0.5.0')
+            name = update.stage('v0.9.0')
         self.assertTrue((update.release_path(name) / 'watermeter/watermeter/__main__.py').is_file())
         self.assertTrue((update.release_path(name) / 'bin/update').is_file())
+        self.assertTrue((update.release_path(name) / 'bin/rtl_wmbus_dev').is_file())
         self.assertEqual(update.current_name(), 'old')

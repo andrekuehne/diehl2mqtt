@@ -1,4 +1,12 @@
-# Verification record
+# Verification records
+
+## Selectable reference/fork decoders (v0.9.0)
+
+Local amd64 builds resolved andrekuehne/rtl-wmbus dev to `41bfbf3dcbb5156470d4e10d99b783bbde416949`. The xaelsouth pin stayed at `34684e655df70867ac86e799561ec6512c45be0a`. Both real binaries passed six reviewed IQ capture cases and 24 reference/fork comparisons, including all gateway math/algorithm combinations on direct-frequency samples. Fork helper/capture tests also passed. This does not establish unchanged RF sensitivity or field reception.
+
+The application/broker/native-update suite, 32 Proxmox host tests, seven build/provenance/release-policy checks and manifest/Compose validation passed locally. All three image targets contain both binaries and the same fork snapshot. Native bundle staging and active-release binary/provenance resolution were exercised, including rejection of missing selected binaries and avoidance of other release directories.
+
+Disposable HA runs verified reference/dev startup, simulated receiver failure/retry, non-root/capability-free operation, secret environment exclusion and shutdown at info/debug levels. An enforced temporary AppArmor profile permitted both real decoder binaries while retaining denied shell execution and filesystem writes. Passwordless sudo was unavailable; the existing Docker loader installed and removed the unique test profile and volume. No production USB devices, keys or broker were used. Destination HA/LXC field acceptance remains pending.
 
 ## Native decoder update and metadata compatibility (v0.8.2)
 

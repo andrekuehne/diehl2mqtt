@@ -19,11 +19,36 @@ def committed(name):
     return git("show", "HEAD:" + name)
 
 
+def native_refs(dockerfile, versions_text):
+    refs = {}
+    for name in ("RTL_WMBUS_REF", "WMBUSMETERS_REF"):
+        matches = set(re.findall(r"^ARG " + name + r"=([0-9a-f]{40})$", dockerfile, re.M))
+        if len(matches) != 1:
+            raise ValueError("Expected one immutable native source pin")
+        refs[name] = matches.pop()
+
+    # Use the tested image's resolved snapshot, never today's branch head.
+    versions = dict(line.split("=", 1) for line in versions_text.splitlines() if "=" in line)
+    dev_commit = versions.get("rtl_wmbus_dev_commit", "")
+    if (not re.fullmatch(r"[0-9a-f]{40}", dev_commit)
+            or versions.get("rtl_wmbus_dev_repository") != "https://github.com/andrekuehne/rtl-wmbus"
+            or versions.get("rtl_wmbus_dev_branch") != "dev"):
+        raise ValueError("Tested image has no valid fork provenance")
+    for key, ref in (("rtl_wmbus_commit", refs["RTL_WMBUS_REF"]),
+                     ("wmbusmeters_commit", refs["WMBUSMETERS_REF"])):
+        if versions.get(key) != ref:
+            raise ValueError("Tested image does not match committed native source pins")
+
+    refs["RTL_WMBUS_DEV_REF"] = dev_commit
+    return refs
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
     parser.add_argument("--image", required=True)
     parser.add_argument("--packages-file", required=True)
+    parser.add_argument("--versions-file", required=True, type=Path)
     parser.add_argument("--app-bundle", required=True, type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -35,12 +60,7 @@ def main():
     stamp = int(git("show", "-s", "--format=%ct", "HEAD"))
     revision = git("rev-parse", "HEAD").decode().strip()
     dockerfile = committed("Dockerfile").decode()
-    refs = {}
-    for name in ("RTL_WMBUS_REF", "WMBUSMETERS_REF"):
-        matches = set(re.findall(r"^ARG " + name + r"=([0-9a-f]{40})$", dockerfile, re.M))
-        if len(matches) != 1:
-            raise ValueError("Expected one immutable native source pin")
-        refs[name] = matches.pop()
+    refs = native_refs(dockerfile, args.versions_file.read_text())
 
     def archive(directory, path):
         def normalize(info):
@@ -87,6 +107,7 @@ def main():
         for name, url, ref in (
             ("rtl-wmbus", "https://github.com/xaelsouth/rtl-wmbus.git", refs["RTL_WMBUS_REF"]),
             ("wmbusmeters", "https://github.com/wmbusmeters/wmbusmeters.git", refs["WMBUSMETERS_REF"]),
+            ("rtl-wmbus-dev", "https://github.com/andrekuehne/rtl-wmbus.git", refs["RTL_WMBUS_DEV_REF"]),
         ):
             checkout = temp / (name + "-checkout")
             subprocess.run(["git", "init", "-q", str(checkout)], check=True)
@@ -97,6 +118,7 @@ def main():
             with (source / (name + "-" + ref + ".tar")).open("wb") as out:
                 subprocess.run(["git", "-C", str(checkout), "archive", "--format=tar", "--prefix=" + name + "/", ref], check=True, stdout=out)
         (source / "THIRD_PARTY_NOTICES.md").write_bytes(committed("THIRD_PARTY_NOTICES.md"))
+        (source / "versions.txt").write_bytes(args.versions_file.read_bytes())
         (source / "packages.txt").write_bytes(Path(args.packages_file).read_bytes())
         (source / "README.txt").write_text(
             "Unmodified pinned native sources and project build materials for " + args.version + ".\n"

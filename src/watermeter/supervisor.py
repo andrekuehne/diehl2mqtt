@@ -1,5 +1,6 @@
 """Own every pipeline member; bounded I/O and whole-session cleanup."""
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -7,16 +8,13 @@ import selectors
 import shutil
 import signal
 import subprocess
-import sys
 import time
 from .health import identity
+from .log import configure, log
 from .private import private_config
+from .provenance import executable, versions, versions_path
 from .reading import accept, encode, InvalidReading
 from .settings import ConfigError
-
-
-def log(message):
-    print(message, file=sys.stderr, flush=True)
 
 
 class Supervisor:
@@ -27,7 +25,7 @@ class Supervisor:
         # overrides both inherited TZ and HA's mounted local timezone.
         self.env = dict(env, TZ="UTC0")
         self.publisher = publisher
-        demodulator = ["rtl_wmbus", "-f", "-p", "S"]
+        demodulator = [executable("rtl_wmbus_dev" if settings.decoder == "dev" else "rtl_wmbus"), "-f", "-p", "S"]
         if settings.fast_math:
             demodulator.append("-a")
         if settings.algorithm == "runlength":
@@ -37,7 +35,7 @@ class Supervisor:
         self.commands = commands or [
             ["rtl_sdr", "-f", settings.frequency, "-s", "1600000", "-"],
             demodulator,
-            ["wmbusmeters", f"--useconfig={config}"],
+            [executable("wmbusmeters"), f"--useconfig={config}"],
         ]
         self.children = []
         self.stop_signal = None
@@ -94,7 +92,8 @@ class Supervisor:
         for category in categories or ["diagnostic (upstream text suppressed)"]:
             if (index, category) not in self.diagnostics:
                 self.diagnostics.add((index, category))
-                log(f"Pipeline component {index + 1}: {category}")
+                level = logging.ERROR if categories else logging.DEBUG
+                log(f"Pipeline component {index + 1}: {category}", level)
 
     def failure(self, message):
         # An early exit can race the selector. Read pending errors before cleanup
@@ -108,8 +107,8 @@ class Supervisor:
                 self.diagnostic(index, data)
             code = child.poll()
             if code is not None:
-                log(f"Pipeline component {index + 1} exited with code {code}")
-        log(message)
+                log(f"Pipeline component {index + 1} exited with code {code}", logging.ERROR)
+        log(message, logging.ERROR)
         return 1
 
     def cleanup(self):
@@ -136,15 +135,21 @@ class Supervisor:
             (self.root / name).unlink(missing_ok=True)
 
     def run(self):
+        configure(self.settings.log_level)
         previous = {s: signal.signal(s, self.stop) for s in (signal.SIGTERM, signal.SIGINT)}
         selector = selectors.DefaultSelector()
         buffer = b""
         invalid_reported = False
         try:
             pipe = subprocess.DEVNULL
-            for command in self.commands:
-                if not shutil.which(command[0]):
+            # Check the entire pipeline before starting any child. PATH selects
+            # the active native release; never fall back to a different decoder.
+            for index, command in enumerate(self.commands):
+                if not shutil.which(command[0], path=self.env.get("PATH", os.defpath)):
+                    if index == 1:
+                        raise ConfigError(f"Selected {self.settings.decoder} decoder executable is missing")
                     raise ConfigError("Required pipeline executable is missing")
+            for command in self.commands:
                 child = subprocess.Popen(command, stdin=pipe, stdout=subprocess.PIPE,
                                          stderr=subprocess.PIPE, env=self.env,
                                          start_new_session=True, bufsize=0)
@@ -160,7 +165,8 @@ class Supervisor:
                 self.publisher.set_alive(True)
                 self.publisher.start()
             log("Receiver running: C1 at configured frequency; waiting for decrypted telegrams")
-            log(f"Demodulator: algorithm={self.settings.algorithm}, fast_math={str(self.settings.fast_math).lower()}")
+            commit = versions().get("rtl_wmbus_dev_commit" if self.settings.decoder == "dev" else "rtl_wmbus_commit", "unknown")
+            log(f"Demodulator: decoder={self.settings.decoder}, commit={commit}, algorithm={self.settings.algorithm}, fast_math={str(self.settings.fast_math).lower()}")
             while not self.stop_signal:
                 if any(child.poll() is not None for child in self.children):
                     return self.failure("Receiver pipeline failed; check component diagnostics above")
@@ -184,18 +190,22 @@ class Supervisor:
                             reading = accept(line, self.settings)
                         except InvalidReading:
                             if not invalid_reported:
-                                log("Ignoring malformed, unrelated, or undecoded reader output")
+                                log("Ignoring malformed, unrelated, or undecoded reader output", logging.DEBUG)
                                 invalid_reported = True
                             continue
                         payload = encode(reading)
-                        print(payload, flush=True)
+                        if self.settings.mqtt:
+                            log(payload, logging.DEBUG)
+                        else:
+                            # JSON-only mode exposes a data stream, independent of diagnostics.
+                            print(payload, flush=True)
                         self.last_received = reading["received_at"]
                         (self.root / "last_received_at").write_text(self.last_received + "\n")
                         os.chmod(self.root / "last_received_at", 0o600)
                         if self.publisher:
                             self.publisher.submit(payload)
                     if len(buffer) > 65536:
-                        log("Decoder output exceeded bounded line limit")
+                        log("Decoder output exceeded bounded line limit", logging.ERROR)
                         return 1
             log("Receiver stopping")
             return 0
@@ -211,9 +221,10 @@ class Supervisor:
 
 
 def run(settings, key, password, env, root=Path("/run/watermeter")):
-    versions = Path("/usr/share/watermeter/versions.txt")
-    if versions.exists():
-        for line in versions.read_text().splitlines():
+    configure(settings.log_level)
+    metadata = versions_path()
+    if metadata.exists():
+        for line in metadata.read_text().splitlines():
             log(line)
     root = Path(root)
     os.umask(0o077)

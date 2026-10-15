@@ -20,7 +20,7 @@ SPEC.loader.exec_module(app)
 class InterfaceTests(unittest.TestCase):
     def test_default_and_advanced_settings_keep_required_meter_prompts(self):
         import argparse
-        args = argparse.Namespace(ctid=None, memory=None, disk=None, release='v0.7.0', fast_math=None, algorithm=None)
+        args = argparse.Namespace(ctid=None, memory=None, disk=None, release='v0.9.0', fast_math=None, algorithm=None, decoder=None)
         cases = [
             ('default', ['00123456', 'broker.invalid', '1883', 'mqtt'], 512, 2),
             ('advanced', ['123', 'reader', '1024', '8', 'vmbr1', '42',
@@ -30,7 +30,7 @@ class InterfaceTests(unittest.TestCase):
             with self.subTest(mode=mode), patch.object(app, 'UI', True), \
                  patch.object(app.sys.stdin, 'isatty', return_value=True), \
                  patch.object(app, 'choose', side_effect=[mode, 'local-lvm'] +
-                              (['true', 'runlength'] if mode == 'advanced' else []) + ['auth', 'false']), \
+                              (['dev', 'true', 'runlength'] if mode == 'advanced' else []) + ['auth', 'false']), \
                  patch.object(app, 'prompt', side_effect=inputs) as prompt, \
                  patch.object(app, 'command_json', side_effect=[123, [{'storage': 'local-lvm', 'active': 1}]]), \
                  patch.object(app, 'check_unused'), patch.object(app, 'check_exclusive'), \
@@ -41,6 +41,7 @@ class InterfaceTests(unittest.TestCase):
             self.assertEqual(settings['memory'], memory)
             self.assertEqual(settings['disk'], disk)
             self.assertEqual(settings['env']['METER_ID'], '00123456')
+            self.assertEqual(settings['env']['WMBUS_DECODER'], 'dev' if mode == 'advanced' else 'reference')
             self.assertEqual(settings['env']['WMBUS_FAST_MATH'], 'true' if mode == 'advanced' else 'false')
             self.assertEqual(settings['env']['WMBUS_ALGORITHM'], 'runlength' if mode == 'advanced' else 'both')
             meter = next(c for c in prompt.call_args_list if c.args[0] == 'Eight-digit Wireless M-Bus meter ID')
@@ -52,8 +53,8 @@ class InterfaceTests(unittest.TestCase):
 
     def test_explicit_receiver_options_apply_to_default_setup(self):
         import argparse
-        args = argparse.Namespace(ctid=None, memory=None, disk=None, release='v0.7.0',
-                                  fast_math='true', algorithm='time2')
+        args = argparse.Namespace(ctid=None, memory=None, disk=None, release='v0.9.0',
+                                  fast_math='true', algorithm='time2', decoder='dev')
         with patch.object(app, 'UI', True), patch.object(app.sys.stdin, 'isatty', return_value=True), \
              patch.object(app, 'choose', side_effect=['default', 'local-lvm', 'off']), \
              patch.object(app, 'prompt', return_value='00123456'), \
@@ -63,6 +64,7 @@ class InterfaceTests(unittest.TestCase):
              patch.object(app, 'release_image', return_value='test-image'), \
              patch.object(app.Path, 'exists', return_value=True):
             settings = app.collect_settings(args)
+        self.assertEqual(settings['env']['WMBUS_DECODER'], 'dev')
         self.assertEqual(settings['env']['WMBUS_FAST_MATH'], 'true')
         self.assertEqual(settings['env']['WMBUS_ALGORITHM'], 'time2')
 

@@ -62,10 +62,23 @@ class AddonTests(unittest.TestCase):
             settings, _, _ = self.configure(fast_math=True, algorithm=algorithm)
             self.assertEqual((settings.fast_math, settings.algorithm), (True, algorithm))
 
+    def test_decoder_defaults_and_selection(self):
+        self.assertEqual(self.configure()[0].decoder, 'reference')
+        self.assertEqual(self.configure(decoder='dev')[0].decoder, 'dev')
+        for value in ('', 'invalid', 'dev -a', False):
+            with self.assertRaises(ConfigError):
+                self.configure(decoder=value)
+
+    def test_log_level_defaults_and_selection(self):
+        self.assertEqual(self.configure()[0].log_level, 'info')
+        for level in ('debug', 'info', 'warning', 'error', 'critical'):
+            self.assertEqual(self.configure(log_level=level)[0].log_level, level)
+
     def test_invalid_options_never_echo_values(self):
         for changes in ({'meter_id': 12345678}, {'meter_id': ''}, {'aes_key': 'bad-secret'},
                         {'mqtt_port': True}, {'mqtt_port': 0}, {'mqtt_auto': 'false'},
                         {'fast_math': 'true'}, {'algorithm': False}, {'algorithm': 'both -a'},
+                        {'log_level': False}, {'log_level': 'invalid-private-value'},
                         {'mqtt_password': 'bad\npassword'}, {'mqtt_host': 'mqtt://secret.invalid'},
                         {'mqtt_username': ''}, {'mqtt_client_key': 'private-key-without-certificate'}):
             with self.subTest(changes=list(changes)):

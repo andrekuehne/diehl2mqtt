@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import re
 
+LOG_LEVELS = ("debug", "info", "warning", "error", "critical")
+
 
 class ConfigError(ValueError):
     pass
@@ -89,10 +91,15 @@ class Settings:
     status_topic: str = "homeassistant/status"
     fast_math: bool = False
     algorithm: str = "both"
+    log_level: str = "info"
+    decoder: str = "reference"
 
     @classmethod
     def load(cls, env=None, offline=False):
         env = os.environ if env is None else env
+        log_level = text(env, "LOG_LEVEL", "info")
+        if log_level not in LOG_LEVELS:
+            raise ConfigError("LOG_LEVEL must be debug, info, warning, error or critical")
         meter_id = "12345678" if offline else text(env, "METER_ID", "12345678")
         driver = "dme173" if offline else text(env, "METER_DRIVER", "dme173")
         name = text(env, "METER_NAME", "Water")
@@ -102,7 +109,10 @@ class Settings:
         algorithm = text(env, "WMBUS_ALGORITHM", "both")
         if algorithm not in ("both", "runlength", "time2"):
             raise ConfigError("WMBUS_ALGORITHM must be both, runlength or time2")
-        receiver = dict(fast_math=fast_math, algorithm=algorithm)
+        decoder = text(env, "WMBUS_DECODER", "reference")
+        if decoder not in ("reference", "dev"):
+            raise ConfigError("WMBUS_DECODER must be reference or dev")
+        receiver = dict(fast_math=fast_math, algorithm=algorithm, log_level=log_level, decoder=decoder)
         if not re.fullmatch(r"[0-9]{8}", meter_id):
             raise ConfigError("METER_ID must be an eight-character decimal string")
         if driver != "dme173" or mode != "c1":

@@ -62,3 +62,5 @@ docker compose -f compose.yaml -f compose.mqtt.yaml -f compose.mqtt.auth.yaml do
 For upgrades, download the next release into a separate directory, copy your protected `secrets/` and nonsecret broker/meter settings into it, and retain the new release's `WATERMETER_IMAGE` digest. Stop the old deployment before starting the new one. Keep the previous directory and digest for rollback. Updates are applied manually.
 
 Each release also supplies checksums and pinned native source/build materials. The full verification record and license notices live in the source repository.
+
+To test the bundled fork, set `WMBUS_DECODER=dev` in `.env` and recreate using the same Compose command. The default `reference` retains the pinned upstream decoder. Startup logs and `docker compose run --rm watermeter versions` identify both commits. Restarting does not refresh dev; install a newer versioned gateway release for a newer snapshot. Select `reference` before rolling back to a release older than 0.9.0.

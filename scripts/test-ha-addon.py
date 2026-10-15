@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -29,20 +30,27 @@ if name == 'rtl_sdr':
         sys.exit(1)
 if name == 'wmbusmeters':
     print('{"_":"telegram","meter":"dme173","id":"00123456","total_m3":1.2,"rssi_dbm":133}', flush=True)
-if name == 'rtl_wmbus':
+if name in ('rtl_wmbus', 'rtl_wmbus_dev'):
+    assert name == ('rtl_wmbus_dev' if (root / 'decoder').read_text() == 'dev' else 'rtl_wmbus')
     assert sys.argv[1:] == ['-f', '-p', 'S', '-a', '-t', '0']
 while True:
     time.sleep(0.1)
 '''
-for binary in ('rtl_sdr', 'rtl_wmbus', 'wmbusmeters'):
+for binary in ('rtl_sdr', 'rtl_wmbus', 'rtl_wmbus_dev', 'wmbusmeters'):
     path = bin_dir / binary
     path.write_text(helper)
     path.chmod(0o755)
+log_level = sys.argv[1] if len(sys.argv) > 1 else 'info'
+assert log_level in ('info', 'debug')
+decoder = sys.argv[2] if len(sys.argv) > 2 else 'reference'
+assert decoder in ('reference', 'dev')
+(root / 'decoder').write_text(decoder)
 data = Path('/data')
 data.mkdir(exist_ok=True)
 (data / 'options.json').write_text(json.dumps(dict(
     meter_id='00123456', aes_key='00112233445566778899aabbccddeeff',
-    mqtt_auto=False, mqtt_host='127.0.0.1', mqtt_port=9, fast_math=True, algorithm='runlength')))
+    mqtt_auto=False, mqtt_host='127.0.0.1', mqtt_port=9, fast_math=True, algorithm='runlength',
+    log_level=log_level, decoder=decoder)))
 env = dict(os.environ, PATH=str(bin_dir) + ':' + os.environ['PATH'], SUPERVISOR_TOKEN='synthetic-token',
            TZ='CET-1CEST,M3.5.0,M10.5.0/3')
 out = root / 'stdout'
@@ -66,9 +74,15 @@ with out.open('w') as stdout, err.open('w') as stderr:
         time.sleep(6)
         with urllib.request.urlopen('http://127.0.0.1:8099/health', timeout=1) as response:
             assert response.status == 200
-        reading = json.loads(out.read_text().splitlines()[-1])
-        assert reading['id'] == '00123456' and reading['total_m3'] == 1.2
-        assert reading['rssi_dbm'] == 133
+        assert out.read_text() == '', 'MQTT mode must not print readings to stdout'
+        if log_level == 'debug':
+            reading = json.loads([line.removeprefix('[DEBUG] ') for line in err.read_text().splitlines()
+                                  if line.startswith('[DEBUG] {')][-1])
+            assert reading['id'] == '00123456' and reading['total_m3'] == 1.2
+            assert reading['rssi_dbm'] == 133
+        else:
+            assert '"total_m3"' not in err.read_text(), 'Info logs must not include decoded readings'
+        assert Path('/tmp/watermeter/last_received_at').read_text().strip()
         state = json.loads(Path('/tmp/watermeter/health.json').read_text())
         for process in state['processes']:
             status = dict(line.split(':', 1) for line in Path(f"/proc/{process['pid']}/status").read_text().splitlines() if ':' in line)
@@ -85,7 +99,7 @@ with out.open('w') as stdout, err.open('w') as stderr:
         assert not Path('/tmp/watermeter/health.json').exists()
         assert '00112233445566778899aabbccddeeff' not in out.read_text() + err.read_text()
         assert 'synthetic-token' not in out.read_text() + err.read_text()
-        print('PASS: add-on options, non-root/capability-free processes, tmpfs, child environment, USB recovery, quiet health and shutdown')
+        print(f'PASS: {log_level} logging, add-on options, non-root/capability-free processes, tmpfs, child environment, USB recovery, quiet health and shutdown')
     finally:
         if child.poll() is None:
             child.kill()

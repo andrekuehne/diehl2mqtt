@@ -55,24 +55,26 @@ class InstallerTests(unittest.TestCase):
             (self.root / name).mkdir(parents=True, exist_ok=True)
         for filename in ('__init__.py', 'lxc.py', 'update.py', 'health.py'):
             (self.root / 'opt/watermeter/watermeter' / filename).write_text('# test')
-        for filename in ('wmbusmeters', 'rtl_wmbus', 'entrypoint.sh', 'healthcheck.sh', 'update'):
+        for filename in ('wmbusmeters', 'rtl_wmbus', 'rtl_wmbus_dev', 'entrypoint.sh', 'healthcheck.sh', 'update'):
             (self.root / 'usr/local/bin' / filename).write_text('test')
         secret = self.root / 'etc/diehl2mqtt/secrets/meter_aes_key'
         secret.write_text('synthetic-only')
         secret.chmod(0o600)
         with patch.object(app.os, 'chown'):
-            app.bootstrap_updates(self.root, 'v0.4.0', 'test-image', (100000, 100000))
+            app.bootstrap_updates(self.root, 'v0.9.0', 'test-image', (100000, 100000))
         base = self.root / 'opt/diehl2mqtt'
-        self.assertEqual(os.readlink(base / 'current'), 'releases/v0.4.0-initial')
+        self.assertEqual(os.readlink(base / 'current'), 'releases/v0.9.0-initial')
         self.assertTrue((base / 'launcher/watermeter/lxc.py').is_file())
-        self.assertTrue((base / 'releases/v0.4.0-initial/watermeter/watermeter/lxc.py').is_file())
+        self.assertTrue((base / 'releases/v0.9.0-initial/watermeter/watermeter/lxc.py').is_file())
         self.assertEqual(secret.read_text(), 'synthetic-only')
         self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
         config = self.root / 'etc/diehl2mqtt/install.json'
         self.assertEqual(config.stat().st_mode & 0o777, 0o600)
         self.assertEqual(json.loads(config.read_text())['kind'], 'diehl2mqtt-lxc')
         with self.assertRaises(app.InstallError):
-            app.bootstrap_updates(self.root, 'v0.4.0', 'test-image', (100000, 100000))
+            app.bootstrap_updates(self.root, 'v0.9.0', 'test-image', (100000, 100000))
+
+        self.assertEqual(os.readlink(self.root / 'usr/local/bin/rtl_wmbus_dev'), '/opt/diehl2mqtt/current/bin/rtl_wmbus_dev')
 
     def test_existing_vm_id_is_refused_cluster_wide(self):
         with patch.object(app, "command_json", return_value=[{"vmid": 123, "type": "qemu", "node": "other"}]):

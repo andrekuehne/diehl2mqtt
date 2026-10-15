@@ -29,6 +29,17 @@ jobs:
         run: |
           [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Refuse rebuilding a published version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-release-available.py "$GITHUB_REF_NAME"
+      - name: Resolve fork dev snapshot once for all targets
+        id: decoder
+        run: |
+          commit=$(python3 scripts/resolve-dev.py)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "RTL-WMBus fork dev snapshot: $commit" >> "$GITHUB_STEP_SUMMARY"
       - name: Test Proxmox host installer without host mutations
         run: python3 -m unittest discover -s tests/proxmox -v
       - name: Check Renovate native dependency extraction and pin consistency
@@ -39,6 +50,8 @@ jobs:
         with:
           context: .
           target: final
+          build-args: |
+            RTL_WMBUS_DEV_REF=${{ steps.decoder.outputs.commit }}
           platforms: linux/amd64
           load: true
           tags: watermeter:local
@@ -54,6 +67,8 @@ jobs:
         with:
           context: .
           target: test
+          build-args: |
+            RTL_WMBUS_DEV_REF=${{ steps.decoder.outputs.commit }}
           platforms: linux/amd64
           load: true
           tags: watermeter:test
@@ -66,6 +81,8 @@ jobs:
         with:
           context: .
           target: ha-addon
+          build-args: |
+            RTL_WMBUS_DEV_REF=${{ steps.decoder.outputs.commit }}
           platforms: linux/amd64
           load: true
           tags: watermeter:ha-addon
@@ -74,6 +91,14 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=production
           cache-to: type=gha,scope=addon,mode=max
+      - name: Verify all built targets contain the resolved snapshot
+        env:
+          DEV_COMMIT: ${{ steps.decoder.outputs.commit }}
+        run: |
+          for image in watermeter:local watermeter:test watermeter:ha-addon; do
+            docker run --rm --network none --entrypoint python "$image" -m watermeter versions > "$RUNNER_TEMP/versions.txt"
+            grep -Fx "rtl_wmbus_dev_commit=$DEV_COMMIT" "$RUNNER_TEMP/versions.txt"
+          done
       - name: Run settings, security, lifecycle, offline-negative and real broker tests
         run: docker run --rm --network none --tmpfs /run/watermeter:mode=0700 watermeter:test
       - name: Verify installed native LXC application layout
@@ -83,7 +108,11 @@ jobs:
         run: |
           python3 -m pip install -r requirements-dev.txt
           python3 scripts/check-addon.py
-          docker run --rm --network none --tmpfs /tmp --entrypoint python --mount type=bind,src="$PWD/scripts/test-ha-addon.py",dst=/test-ha-addon.py,readonly watermeter:ha-addon /test-ha-addon.py
+          for decoder in reference dev; do
+            for level in info debug; do
+              docker run --rm --network none --tmpfs /tmp --entrypoint python --mount type=bind,src="$PWD/scripts/test-ha-addon.py",dst=/test-ha-addon.py,readonly watermeter:ha-addon /test-ha-addon.py "$level" "$decoder"
+            done
+          done
       - name: Test enforced AppArmor and non-root runtime
         run: |
           sudo apt-get update -qq
@@ -175,6 +204,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Recheck version and registry availability before publication
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-release-available.py "$GITHUB_REF_NAME" --images
       - name: Publish exact tested image
         id: image
         env:
@@ -237,8 +271,9 @@ jobs:
           IMAGE: ${{ steps.image.outputs.reference }}
         run: |
           docker run --rm --network none --entrypoint cat watermeter:local /usr/share/watermeter/packages.txt > "$RUNNER_TEMP/packages.txt"
+          docker run --rm --network none --entrypoint cat watermeter:local /usr/share/watermeter/versions.txt > "$RUNNER_TEMP/versions.txt"
           docker run --rm --network none --entrypoint /usr/bin/python3 --mount type=bind,src="$PWD/scripts/package-app.py",dst=/tmp/package-app.py,readonly watermeter:local /tmp/package-app.py --version "$GITHUB_REF_NAME" --image "$IMAGE" > "$RUNNER_TEMP/app.tar.gz"
-          python3 scripts/package-release.py --version "$GITHUB_REF_NAME" --image "$IMAGE" --packages-file "$RUNNER_TEMP/packages.txt" --app-bundle "$RUNNER_TEMP/app.tar.gz" --output "$RUNNER_TEMP/release"
+          python3 scripts/package-release.py --version "$GITHUB_REF_NAME" --image "$IMAGE" --packages-file "$RUNNER_TEMP/packages.txt" --versions-file "$RUNNER_TEMP/versions.txt" --app-bundle "$RUNNER_TEMP/app.tar.gz" --output "$RUNNER_TEMP/release"
           tar -xzf "$RUNNER_TEMP/release/diehl2mqtt-$GITHUB_REF_NAME-deploy.tar.gz" -C "$RUNNER_TEMP"
           cd "$RUNNER_TEMP/diehl2mqtt-$GITHUB_REF_NAME"
           cp .env.example .env
@@ -264,8 +299,5 @@ jobs:
           IMAGE: ${{ steps.image.outputs.reference }}
         run: |
           printf 'Linux amd64 release. Download the deployment archive, extract it and follow its README.\n\nImage: `%s`\n\nNative source/build materials and SHA256 checksums are attached. Runtime secrets are created only on your host.\n' "$IMAGE" > "$RUNNER_TEMP/release-notes.md"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/release/"* --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/release/"* --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
-          fi
+          python3 scripts/check-release-available.py "$GITHUB_REF_NAME"
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/release/"* --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"

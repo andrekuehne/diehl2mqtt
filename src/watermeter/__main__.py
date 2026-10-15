@@ -1,9 +1,12 @@
 import argparse
+import logging
 import os
 from pathlib import Path
 import sys
 from .settings import Settings, ConfigError, secret, scrub_environment
 from .reading import encode
+from .log import configure, log
+from .provenance import versions_path
 
 
 def main():
@@ -12,9 +15,11 @@ def main():
     parser.add_argument("--fixture", default="/usr/share/watermeter/fixture.hex")
     args = parser.parse_args()
     if args.mode == "versions":
-        print(Path("/usr/share/watermeter/versions.txt").read_text(), end="")
+        print(versions_path().read_text(), end="")
         return 0
     try:
+        configure()
+        configure(os.environ.get("LOG_LEVEL", "info"))
         from .private import require_tmpfs
         require_tmpfs()
         settings = Settings.load(offline=args.mode == "offline")
@@ -29,10 +34,10 @@ def main():
         from .supervisor import run
         return run(settings, key, password, env)
     except ConfigError as exc:
-        print(str(exc), file=sys.stderr, flush=True)
+        log(str(exc), logging.ERROR)
         return 2
     except Exception:
-        print("Reader failed safely; check runtime files and installed binaries", file=sys.stderr, flush=True)
+        log("Reader failed safely; check runtime files and installed binaries", logging.ERROR)
         return 1
 
 

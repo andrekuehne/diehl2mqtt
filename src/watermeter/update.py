@@ -183,10 +183,16 @@ def stage(wanted):
         compatible(metadata, wanted)
         env = dict(os.environ, PYTHONPATH=str(tree / 'watermeter'))
         # No meter/key is needed for these smoke checks. Never print child output.
-        for command in ([str(tree / 'venv/bin/python'), '-c', 'import watermeter.__main__, watermeter.update, watermeter.health, paho.mqtt'],
+        commands = [[str(tree / 'venv/bin/python'), '-c', 'import watermeter.__main__, watermeter.update, watermeter.health, paho.mqtt'],
                         [str(tree / 'bin/wmbusmeters'), '--listdrivers'],
-                        [str(tree / 'bin/rtl_wmbus'), '-V']):
-            result = subprocess.run(command, env=env, capture_output=True, timeout=15)
+                        [str(tree / 'bin/rtl_wmbus'), '-V']]
+        if tuple(map(int, wanted.removeprefix('v').split('.'))) >= (0, 9, 0):
+            commands.append([str(tree / 'bin/rtl_wmbus_dev'), '-V'])
+        for command in commands:
+            try:
+                result = subprocess.run(command, env=env, capture_output=True, timeout=15)
+            except (OSError, subprocess.TimeoutExpired):
+                raise UpdateError('Staged application failed its compatibility smoke check') from None
             if result.returncode:
                 raise UpdateError('Staged application failed its compatibility smoke check')
         name = wanted + '-' + checks[0][:12]

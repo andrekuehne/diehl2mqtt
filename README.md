@@ -87,16 +87,16 @@ docker version
 docker compose version
 ```
 
-Download the **v0.8.2** deployment archive. It includes Compose files, setup scripts and a release-specific image digest; no source checkout, local build or registry login is needed. See [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for available versions and [signature verification](SECURITY.md#verify-release-provenance) to authenticate release checksums before using them.
+Download the **v0.9.0** deployment archive. It includes Compose files, setup scripts and a release-specific image digest; no source checkout, local build or registry login is needed. See [GitHub Releases](https://github.com/andrekuehne/diehl2mqtt/releases) for available versions and [signature verification](SECURITY.md#verify-release-provenance) to authenticate release checksums before using them.
 
 ```bash
 mkdir diehl2mqtt-install
 cd diehl2mqtt-install
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.8.2/diehl2mqtt-v0.8.2-deploy.tar.gz
-curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.8.2/SHA256SUMS
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.9.0/diehl2mqtt-v0.9.0-deploy.tar.gz
+curl -fLO https://github.com/andrekuehne/diehl2mqtt/releases/download/v0.9.0/SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
-tar -xzf diehl2mqtt-v0.8.2-deploy.tar.gz
-cd diehl2mqtt-v0.8.2
+tar -xzf diehl2mqtt-v0.9.0-deploy.tar.gz
+cd diehl2mqtt-v0.9.0
 cp .env.example .env
 chmod 600 .env
 nano .env
@@ -140,7 +140,7 @@ Ctrl-C stops following logs while the service keeps running. Use the same Compos
 | MQTT without password | `compose.yaml`, `compose.mqtt.yaml` | AES key |
 | JSON only | `compose.yaml` | AES key |
 
-For a broker without authentication, leave `MQTT_USERNAME` empty and omit the password setup. JSON-only operation does not require a broker or network access. Direct container stdout contains one decoded JSON object per line; Docker logs also include startup diagnostics.
+For a broker without authentication, leave `MQTT_USERNAME` empty and omit the password setup. JSON-only operation does not require a broker or network access. Without MQTT, direct container stdout contains one decoded JSON object per line regardless of log level. With MQTT, decoded readings appear only in `debug` logs. Set `LOG_LEVEL` to `debug`, `info`, `warning`, `error` or `critical` (default `info`) to filter diagnostics on stderr, then recreate the container. The Home Assistant add-on exposes the same choice as `log_level` in Configuration; see [logging and storage](ha-addon/DOCS.md#logging).
 
 To stop and remove the deployment's containers/network:
 
@@ -229,6 +229,18 @@ Docker and LXC use the environment settings below. The HA app exposes correspond
 | `HA_STATUS_TOPIC` | `homeassistant/status` |
 
 Only one publisher should use a meter's state/availability topics. Keep the meter ID and topic prefixes stable to reuse existing Home Assistant entities. Home Assistant preserves user-customized names and existing entity IDs.
+
+## Select the RTL-WMBus decoder
+
+Version 0.9.0 bundles two decoders: `reference` is the existing pinned xaelsouth upstream build (default); `dev` is a snapshot of [andrekuehne/rtl-wmbus dev](https://github.com/andrekuehne/rtl-wmbus/tree/dev), built when the gateway image is built. Only the selected decoder runs. Both use the same C1/T1 processing flags, frequency, fast-math and algorithm settings; MQTT topics and Home Assistant entities keep their identities.
+
+- **Docker:** set `WMBUS_DECODER=dev` in `.env` and recreate with your existing Compose `up -d --wait` command.
+- **HA app:** select `dev` under **RTL-WMBus decoder**, save and restart.
+- **Native LXC:** use `--decoder dev` during installation, or follow the [existing-LXC switching instructions](docs/proxmox.md#decoder-selection).
+
+Switch back with `reference`. Startup diagnostics identify the selected decoder and commit; `docker compose run --rm watermeter versions` reports both bundled commits without needing a meter key. The fork is fetched only during builds. Updating an installation supplies a newer bundled snapshot; restarting alone does not download changes. Docker source builds track `dev` automatically; `docker build --build-arg RTL_WMBUS_DEV_REF=<full-commit> .` reproduces a selected snapshot.
+
+For field testing, keep frequency, math and algorithm settings identical and compare CPU use, fresh readings and reception gaps over alternating reference/dev periods. Replay tests do not prove unchanged RF sensitivity. Before rolling back to a gateway older than 0.9.0, select `reference` first.
 
 ## Reduce SDR CPU use
 

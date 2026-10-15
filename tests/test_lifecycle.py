@@ -15,6 +15,45 @@ from watermeter.supervisor import Supervisor
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_json_only_stdout_survives_critical_log_level(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = self.launch(root, 'json-critical')
+            try:
+                deadline = time.monotonic() + 4
+                while not (root / 'last_received_at').exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue((root / 'last_received_at').exists())
+            finally:
+                process.send_signal(signal.SIGTERM)
+                stdout, stderr = process.communicate(timeout=8)
+            self.assertEqual(process.returncode, 0, stderr)
+            self.assertEqual(json.loads(stdout)['total_m3'], 1.2)
+            self.assertEqual(stderr, '')
+            self.no_children(root)
+
+    def test_mqtt_readings_only_log_at_debug_and_always_reach_publisher(self):
+        for level in ('debug', 'info', 'warning', 'error', 'critical'):
+            with self.subTest(level=level), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                process = self.launch(root, 'log-' + level)
+                try:
+                    deadline = time.monotonic() + 4
+                    while not (root / 'last_received_at').exists() and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertTrue((root / 'last_received_at').exists())
+                finally:
+                    process.send_signal(signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=8)
+                self.assertEqual(process.returncode, 0, stderr)
+                self.assertEqual(stdout, '')
+                published = json.loads((root / 'published.json').read_text())
+                self.assertEqual(published['total_m3'], 1.2)
+                self.assertEqual('"total_m3"' in stderr, level == 'debug')
+                self.assertEqual('Ignoring malformed' in stderr, level == 'debug')
+                self.assertEqual('Receiver running' in stderr, level in ('debug', 'info'))
+                self.no_children(root)
+
     def test_pipeline_overrides_berlin_timezone_in_summer_and_winter(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

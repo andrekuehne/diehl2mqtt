@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-for binary in rtl_sdr rtl_test rtl_wmbus wmbusmeters; do
+for binary in rtl_sdr rtl_test rtl_wmbus rtl_wmbus_dev wmbusmeters; do
     command -v "$binary" >/dev/null
     if ldd "$(command -v "$binary")" | grep -q 'not found'; then
         echo "Missing runtime libraries" >&2
@@ -9,6 +9,7 @@ for binary in rtl_sdr rtl_test rtl_wmbus wmbusmeters; do
 done
 wmbusmeters --version
 rtl_wmbus -V
+rtl_wmbus_dev -V
 wmbusmeters --listdrivers | grep -E '^dme173[[:space:]]'
 wmbusmeters --listfields=dme173 | grep total_m3
 # These two utilities use nonzero help exits, not --version.

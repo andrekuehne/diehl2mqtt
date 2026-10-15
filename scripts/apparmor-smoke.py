@@ -98,13 +98,14 @@ result = subprocess.run(['rtl_sdr', '-d', '2147483647', '-f', '868.95M', '-s', '
                         capture_output=True, timeout=10)
 assert result.returncode != 0 and any(message in result.stderr for message in
                                      (b'No supported devices', b'No matching devices found'))
-child = subprocess.Popen(['rtl_wmbus', '-f', '-p', 'S'], stdin=subprocess.PIPE,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-time.sleep(0.2)
-assert child.poll() is None
-os.killpg(child.pid, signal.SIGTERM)
-child.wait(timeout=5)
-child.stdin.close()
+for binary in ('rtl_wmbus', 'rtl_wmbus_dev'):
+    child = subprocess.Popen([binary, '-f', '-p', 'S'], stdin=subprocess.PIPE,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    time.sleep(0.2)
+    assert child.poll() is None
+    os.killpg(child.pid, signal.SIGTERM)
+    child.wait(timeout=5)
+    child.stdin.close()
 
 state = dict(heartbeat=time.monotonic(), processes=[dict(pid=os.getpid(), started=identity(os.getpid()))] * 4)
 (root / 'health.json').write_text(json.dumps(state))

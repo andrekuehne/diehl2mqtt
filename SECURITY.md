@@ -31,7 +31,7 @@ From v0.8.0, CI signs standalone and HA image **digests** using Cosign's keyless
 Install [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/) using Sigstore's official instructions. After downloading the checksum file, its bundle and the desired archives from the **same release**, verify before extracting/executing:
 
 ```sh
-version=v0.8.2
+version=v0.9.0
 identity="https://github.com/andrekuehne/diehl2mqtt/.github/workflows/build.yml@refs/tags/$version"
 cosign verify-blob --bundle SHA256SUMS.sigstore.json \
   --certificate-identity "$identity" \

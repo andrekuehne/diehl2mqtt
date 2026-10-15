@@ -13,8 +13,10 @@ services:
       METER_NAME: "${METER_NAME:-Water}"
       WMBUS_FREQUENCY: "${WMBUS_FREQUENCY:-868.95M}"
       WMBUS_MODE: "${WMBUS_MODE:-c1}"
+      WMBUS_DECODER: "${WMBUS_DECODER:-reference}"
       WMBUS_FAST_MATH: "${WMBUS_FAST_MATH:-false}"
       WMBUS_ALGORITHM: "${WMBUS_ALGORITHM:-both}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
       MQTT_ENABLED: "false"
     secrets:
       - meter_aes_key
