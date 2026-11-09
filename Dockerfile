@@ -2,7 +2,7 @@
 ARG BASE_IMAGE=debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 FROM ${BASE_IMAGE} AS build
 ARG BASE_IMAGE
-ARG RTL_WMBUS_REF=34684e655df70867ac86e799561ec6512c45be0a
+ARG RTL_WMBUS_REF=10d771e38532d1bd590ef0c9cc5d4067c23c6a4a
 ARG WMBUSMETERS_REF=b58d96758e71ba7a4c1d9674c7fcd05eb36fceea
 ARG BUILD_JOBS=4
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,7 +43,7 @@ RUN cd /build/rtl-dev && make release && make check \
 
 FROM ${BASE_IMAGE} AS runtime
 ARG BASE_IMAGE
-ARG RTL_WMBUS_REF=34684e655df70867ac86e799561ec6512c45be0a
+ARG RTL_WMBUS_REF=10d771e38532d1bd590ef0c9cc5d4067c23c6a4a
 ARG WMBUSMETERS_REF=b58d96758e71ba7a4c1d9674c7fcd05eb36fceea
 LABEL org.opencontainers.image.title="Diehl HYDRUS water meter reader" \
       org.opencontainers.image.description="RTL-SDR C1 decoder with optional MQTT and Home Assistant discovery" \
